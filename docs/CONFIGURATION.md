@@ -114,11 +114,11 @@ All backup scripts use the same configuration file with these data flows:
 
 | Script | Data Source | Mission Destination | EPA Shower Destination |
 |--------|-------------|---------------------|----------------------|
-| `mh_daq_file_backup.py` | `local_sources.indoor_daq.path` | `remote_destinations.mission.base_path\indoor_daq\` | ❌ Not backed up |
-| `mh_daq_file_backup.py` | `local_sources.outdoor_weather.path` | `remote_destinations.mission.base_path\weather_station\` | ❌ Not backed up |
-| `epa_shower_file_backup.py` | `local_sources.indoor_daq.path\<archive_year>` | ❌ Not backed up | `remote_destinations.epa_shower.base_path\indoor_daq\<archive_year>\` |
-| `epa_shower_file_backup.py` | `local_sources.outdoor_weather.path\<archive_year>` | ❌ Not backed up | `remote_destinations.epa_shower.base_path\weather_station\<archive_year>\` |
-| `ecobee_thermostat_backup.py` | Ecobee API (internet) | `remote_destinations.thermostat.base_path\YYYY\` | ❌ Not backed up |
+| `mh_daq_file_backup.py` | `local_sources.indoor_daq.path` | `remote_destinations.mission.base_path\indoor_daq\` | Not backed up |
+| `mh_daq_file_backup.py` | `local_sources.outdoor_weather.path` | `remote_destinations.mission.base_path\weather_station\` | Not backed up |
+| `epa_shower_file_backup.py` | `local_sources.indoor_daq.path\<archive_year>` | Not backed up | `remote_destinations.epa_shower.base_path\indoor_daq\<archive_year>\` |
+| `epa_shower_file_backup.py` | `local_sources.outdoor_weather.path\<archive_year>` | Not backed up | `remote_destinations.epa_shower.base_path\weather_station\<archive_year>\` |
+| `ecobee_thermostat_backup.py` | Ecobee API (internet) | `remote_destinations.thermostat.base_path\YYYY\` | Not backed up |
 
 All source and destination paths are configured in `data_config.json`.
 

@@ -206,13 +206,16 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# VS Code setting
+settings.json
+
 # ==============================================================================
 # Building 423 IAQ Manufactured House (MH) DAQ Project Specific
 # ==============================================================================
 
 # Data configuration (contains local paths - DO NOT COMMIT)
-# may add data_config in the future.
 data_config.json
+ecobee_tokens.json
 
 # OS Specific
 Thumbs.db
