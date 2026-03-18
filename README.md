@@ -100,11 +100,11 @@ Building423_IAQ-MH_DAQ/
 ### Hardware & Network
 - **Machine:** DAQ desktop computer (Building 423)
 - **Network access:** NIST mission network
-- **Storage:** Access to `\\mission.el.nist.gov\Programs\energy_netzero\...` (mission drive)
-- **Additional access:** `\\elwood.nist.gov\732_EL\...` (for EPA Shower backup)
+- **Storage:** Access to the mission network drive (path configured in `data_config.json` → `remote_destinations.mission.base_path`)
+- **Additional access:** Elwood network drive (path configured in `data_config.json` → `remote_destinations.epa_shower.base_path`, for EPA Shower backup)
 
 ### Software
-- **Python 3.x** (installed via Miniforge/Conda at `C:\Users\iaq\AppData\Local\miniforge3\`)
+- **Python 3.x** (installed via Miniforge/Conda — run `conda info --base` to find your install path)
 - **pandas library** (install once in base conda environment)
 - **Windows command prompt/PowerShell** to run batch files
 
@@ -120,9 +120,9 @@ Building423_IAQ-MH_DAQ/
 All backed-up data is organized by source and date:
 
 ```
-\\mission.el.nist.gov\Programs\energy_netzero\ventilation_iaq\Manufactured House\DAQ_Data\raw_data\
+<remote_destinations.mission.base_path>\        ← configured in data_config.json
     ├── indoor_daq\          ← Task Logger files
-    ├── weather_station\     ← Outdoor weather station files  
+    ├── weather_station\     ← Outdoor weather station files
     └── thermostat\          ← Ecobee4 runtime CSVs
         └── YYYY\
             └── YYYY-MM-DD_thermostat.csv
@@ -130,7 +130,7 @@ All backed-up data is organized by source and date:
 
 EPA Shower data also copies to:
 ```
-\\elwood.nist.gov\732_EL\732\internal\IAQ\EPA Shower\MH DAQ\
+<remote_destinations.epa_shower.base_path>\     ← configured in data_config.json
     ├── indoor_daq\2026\
     └── weather_station\2026\
 ```

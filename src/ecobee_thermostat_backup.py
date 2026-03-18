@@ -116,10 +116,9 @@ config = load_config()
 # CONFIGURATION — Load from data_config.json or environment variables
 # ---------------------------------------------------------------------------
 
-# Token file from environment variable or default location
-# Default uses Path.home(), which resolves cross-platform:
-#   Windows:   C:\Users\iaq\scripts\ecobee_tokens.json
-#   Linux/RPi: /home/pi/scripts/ecobee_tokens.json
+# Token file from environment variable or default location.
+# Default uses Path.home() / "scripts" / "ecobee_tokens.json" (cross-platform).
+# Override by setting the ECOBEE_TOKEN_FILE environment variable.
 TOKEN_FILE_PATH = Path(
     os.getenv("ECOBEE_TOKEN_FILE", Path.home() / "scripts" / "ecobee_tokens.json")
 )

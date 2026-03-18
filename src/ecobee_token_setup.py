@@ -35,6 +35,7 @@ Date: 2026
 """
 
 import json
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -44,11 +45,12 @@ import requests
 # ---------------------------------------------------------------------------
 # CONFIGURATION — Edit TOKEN_FILE_PATH for your system before running
 # ---------------------------------------------------------------------------
-# Default resolves to the user's home directory, which is cross-platform:
-#   Windows:   C:\Users\iaq\scripts\ecobee_tokens.json
-#   Linux/RPi: /home/pi/scripts/ecobee_tokens.json
-# Override example: TOKEN_FILE_PATH = Path(r"C:\Users\iaq\Scripts\ecobee_tokens.json")
-TOKEN_FILE_PATH = Path.home() / "scripts" / "ecobee_tokens.json"
+# Default resolves to a "scripts" folder in the current user's home directory.
+# Override by setting the ECOBEE_TOKEN_FILE environment variable, or by
+# editing the line below to specify a different path.
+TOKEN_FILE_PATH = Path(
+    os.getenv("ECOBEE_TOKEN_FILE", Path.home() / "scripts" / "ecobee_tokens.json")
+)
 
 ECOBEE_AUTH_URL = "https://api.ecobee.com/authorize"
 ECOBEE_TOKEN_URL = "https://api.ecobee.com/token"

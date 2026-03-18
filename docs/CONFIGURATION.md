@@ -114,23 +114,25 @@ All backup scripts use the same configuration file with these data flows:
 
 | Script | Data Source | Mission Destination | EPA Shower Destination |
 |--------|-------------|---------------------|----------------------|
-| `mh_daq_file_backup.py` | `C:\Users\iaq\Desktop\Task_Logger_Data` | `\\mission\...\indoor_daq\` | ❌ Not backed up |
-| `mh_daq_file_backup.py` | `C:\Users\iaq\Desktop\Outdoor_Data` | `\\mission\...\weather_station\` | ❌ Not backed up |
-| `epa_shower_file_backup.py` | `C:\Users\iaq\Desktop\Task_Logger_Data\2026` | ❌ Not backed up | `\\elwood\...\indoor_daq\2026\` |
-| `epa_shower_file_backup.py` | `C:\Users\iaq\Desktop\Outdoor_Data\2026` | ❌ Not backed up | `\\elwood\...\weather_station\2026\` |
-| `ecobee_thermostat_backup.py` | Ecobee API (internet) | `\\mission\...\thermostat\YYYY\` | ❌ Not backed up |
+| `mh_daq_file_backup.py` | `local_sources.indoor_daq.path` | `remote_destinations.mission.base_path\indoor_daq\` | ❌ Not backed up |
+| `mh_daq_file_backup.py` | `local_sources.outdoor_weather.path` | `remote_destinations.mission.base_path\weather_station\` | ❌ Not backed up |
+| `epa_shower_file_backup.py` | `local_sources.indoor_daq.path\<archive_year>` | ❌ Not backed up | `remote_destinations.epa_shower.base_path\indoor_daq\<archive_year>\` |
+| `epa_shower_file_backup.py` | `local_sources.outdoor_weather.path\<archive_year>` | ❌ Not backed up | `remote_destinations.epa_shower.base_path\weather_station\<archive_year>\` |
+| `ecobee_thermostat_backup.py` | Ecobee API (internet) | `remote_destinations.thermostat.base_path\YYYY\` | ❌ Not backed up |
+
+All source and destination paths are configured in `data_config.json`.
 
 ### Network Path Format
 
 Windows network paths in JSON must use **double backslashes** (`\\\\`):
 
 ```json
-"base_path": "\\\\mission.el.nist.gov\\Programs\\energy_netzero\\ventilation_iaq\\Manufactured House\\DAQ_Data\\raw_data"
+"base_path": "\\\\YOUR_SERVER\\YOUR_SHARE\\...\\DAQ_Data\\raw_data"
 ```
 
-This represents the actual path:
+This represents the actual UNC path:
 ```
-\\mission.el.nist.gov\Programs\energy_netzero\ventilation_iaq\Manufactured House\DAQ_Data\raw_data
+\\YOUR_SERVER\YOUR_SHARE\...\DAQ_Data\raw_data
 ```
 
 ---
@@ -179,7 +181,7 @@ After obtaining the API key, run the interactive token setup script on the DAQ c
 1. Open **Command Prompt** on the **DAQ computer** in Building 423
 2. Navigate to the scripts folder:
    ```
-   cd C:\Users\iaq\Building423_IAQ-MH_DAQ\src
+   cd <repo_path>\src
    ```
 3. Run the setup script:
    ```
@@ -188,10 +190,7 @@ After obtaining the API key, run the interactive token setup script on the DAQ c
 4. Paste your API Key when prompted
 5. The script will display a **4-character PIN**
 6. Go to **ecobee.com → My Apps** → **Add Application** and enter the PIN
-7. Return to Command Prompt and press Enter — tokens will be saved to:
-   ```
-   C:\Users\iaq\scripts\ecobee_tokens.json
-   ```
+7. Return to Command Prompt and press Enter — tokens will be saved to the path shown on screen (default: `%USERPROFILE%\scripts\ecobee_tokens.json`, or the path set in the `ECOBEE_TOKEN_FILE` environment variable)
 
 ### Token Lifetime and Refresh
 
@@ -208,18 +207,17 @@ If the script fails on a given day, you can retrieve that day's data later using
 
 ```bat
 set TARGET_DATE_OVERRIDE=2026-03-15
-python C:\Users\iaq\Building423_IAQ-MH_DAQ\src\ecobee_thermostat_backup.py
+python <repo_path>\src\ecobee_thermostat_backup.py
 ```
 
 The script skips dates where the CSV file already exists, so re-running it is always safe.
 
 ### Ecobee Data Structure
 
-Thermostat data is organized as:
+Thermostat data is organized under the path configured in `data_config.json` → `remote_destinations.thermostat.base_path`:
 
 ```
-\\mission.el.nist.gov\Programs\energy_netzero\ventilation_iaq\Manufactured House\DAQ_Data\raw_data\
-└── thermostat\
+<remote_destinations.thermostat.base_path>\
     ├── backup_log_thermostat.txt
     └── 2026\
         ├── 2026-01-01_thermostat.csv
@@ -249,8 +247,8 @@ The DAQ computer requires **PIV smart card login**, which prevents standard Wind
 
    **General Tab:**
    - **Task type:** `Run a Program / Script`
-   - **Program / Script:** `C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\run_backup.bat`
-   - **Start in (working directory):** `C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts`
+   - **Program / Script:** `<repo_path>\scripts\run_backup.bat`
+   - **Start in (working directory):** `<repo_path>\scripts`
    - **Description:** `MH IAQ DAQ Backup`
 
 4. Click the **Schedule** tab
@@ -301,9 +299,9 @@ To test the backup system:
 1. On the **DAQ computer**, open **Command Prompt**
 2. Run:
    ```
-   C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\run_backup.bat
+   <repo_path>\scripts\run_backup.bat
    ```
-3. Open `batch_output.log` to verify all backups succeeded
+3. Open `<repo_path>\scripts\batch_output.log` to verify all backups succeeded
 
 ### Viewing Backed-Up Data
 

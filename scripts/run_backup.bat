@@ -6,15 +6,23 @@ REM This batch file ensures the conda environment is properly activated
 REM and captures any output/errors to a local log file.
 REM
 REM For Task Scheduler:
-REM   Program/script: C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\run_backup.bat
-REM   Start in:       C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts
+REM   Program/script: <repo_path>\scripts\run_backup.bat
+REM   Start in:       <repo_path>\scripts
 REM =========================================================================
 
-REM Set the script locations (modify these paths as needed)
-set SCRIPT_PATH=C:\Users\iaq\Building423_IAQ-MH_DAQ\src\mh_daq_file_backup.py
-set SCRIPT_PATH2=C:\Users\iaq\Building423_IAQ-MH_DAQ\src\epa_shower_file_backup.py
-set SCRIPT_PATH3=C:\Users\iaq\Building423_IAQ-MH_DAQ\src\ecobee_thermostat_backup.py
-set LOG_PATH=C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\batch_output.log
+REM =========================================================================
+REM CONFIGURATION — Update CONDA_ACTIVATE for your installation
+REM   Run: conda info --base    to find your conda base directory.
+REM   Then set CONDA_ACTIVATE to: <your_conda_base>\Scripts\activate.bat
+REM =========================================================================
+set CONDA_ACTIVATE=<conda_base>\Scripts\activate.bat
+
+REM Script and log paths are resolved relative to this batch file's location.
+REM No edits needed here unless the repo structure changes.
+set SCRIPT_PATH=%~dp0..\src\mh_daq_file_backup.py
+set SCRIPT_PATH2=%~dp0..\src\epa_shower_file_backup.py
+set SCRIPT_PATH3=%~dp0..\src\ecobee_thermostat_backup.py
+set LOG_PATH=%~dp0batch_output.log
 
 REM Log start time
 echo =========================================== >> "%LOG_PATH%"
@@ -22,7 +30,7 @@ echo Backup started: %date% %time% >> "%LOG_PATH%"
 echo =========================================== >> "%LOG_PATH%"
 
 REM Activate conda base environment
-call C:\Users\iaq\AppData\Local\miniforge3\Scripts\activate.bat >> "%LOG_PATH%" 2>&1
+call "%CONDA_ACTIVATE%" >> "%LOG_PATH%" 2>&1
 
 REM Run the first Python script (MH DAQ indoor + weather station backup)
 python "%SCRIPT_PATH%" >> "%LOG_PATH%" 2>&1

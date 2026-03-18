@@ -2,11 +2,16 @@
 
 This guide provides solutions for common issues encountered when running the MH DAQ backup system. Start by checking the `batch_output.log` file to identify the error, then find the matching solution below.
 
+> **Path placeholders used in this guide:**
+> - `<repo_path>` — the folder where the repository was cloned
+> - `<conda_path>` — your conda base directory (run `conda info --base` to find it)
+> - Source and destination paths are configured in `data_config.json`
+
 ---
 
 ## Quick Start: Finding Your Error
 
-1. Open `C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\batch_output.log` in **Notepad**
+1. Open `<repo_path>\scripts\batch_output.log` in **Notepad**
 2. Look for lines containing `ERROR` or `NOT accessible`
 3. Find that error message in the table below
 4. Follow the solution steps
@@ -26,7 +31,7 @@ This guide provides solutions for common issues encountered when running the MH 
 1. **Check network connection:**
    - Verify the DAQ computer is physically connected to the NIST network
    - If using VPN, verify the connection is active
-   - Open **File Explorer** and type `\\mission.el.nist.gov\` in the address bar
+   - Open **File Explorer** and type the mission base path (from `data_config.json` → `remote_destinations.mission.base_path`) in the address bar
    - You should see folders; if not, network access is the problem
 
 2. **Check IP address and DNS:**
@@ -53,20 +58,20 @@ This guide provides solutions for common issues encountered when running the MH 
 **Solution:**
 
 1. On the **DAQ computer**, open **Command Prompt**
-2. Navigate to:
+2. Navigate to the `src` folder:
    ```
-   cd C:\Users\iaq\Scripts
+   cd <repo_path>\src
    ```
 3. Run the token setup script:
    ```
    python ecobee_token_setup.py
    ```
 4. Follow the prompts to authorize the Ecobee API (see [Configuration Guide](CONFIGURATION.md) for detailed steps)
-5. Verify the token file was created:
+5. The script will print the token file path when setup is complete. Verify the file was created:
    ```
-   dir C:\Users\iaq\scripts\ecobee_tokens.json
+   dir %USERPROFILE%\scripts\ecobee_tokens.json
    ```
-   > If the file exists, setup was successful
+   > If the file exists, setup was successful. If you used a custom `ECOBEE_TOKEN_FILE` path, check that location instead.
 
 ---
 
@@ -77,9 +82,9 @@ This guide provides solutions for common issues encountered when running the MH 
 **Solution:**
 
 1. Open **Command Prompt** on the **DAQ computer**
-2. Navigate to:
+2. Navigate to the `src` folder:
    ```
-   cd C:\Users\iaq\Scripts
+   cd <repo_path>\src
    ```
 3. Re-run the token setup script:
    ```
@@ -135,7 +140,7 @@ This guide provides solutions for common issues encountered when running the MH 
    - If not, contact IT
 
 2. Check the mission drive for the Ecobee data that **did** get backed up:
-   - Navigate to: `\\mission...\raw_data\thermostat\YYYY\`
+   - Navigate to: `<remote_destinations.thermostat.base_path>\YYYY\` (from `data_config.json`)
    - Look for CSV files with today's date
    - If they exist, the backup partially succeeded
 
@@ -174,9 +179,13 @@ This guide provides solutions for common issues encountered when running the MH 
    ```
    - If you see a version, Python is installed but not in PATH
 
-2. Try using the full conda path:
+2. Find your conda base path and try the full python path:
    ```
-   C:\Users\iaq\AppData\Local\miniforge3\Scripts\python --version
+   conda info --base
+   ```
+   Then run:
+   ```
+   <conda_path>\Scripts\python --version
    ```
 
 3. If this works, you may need to re-add Python to your PATH:
@@ -201,7 +210,7 @@ This guide provides solutions for common issues encountered when running the MH 
 3. Wait for the installation to complete
 4. Test the backup again:
    ```
-   C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\run_backup.bat
+   <repo_path>\scripts\run_backup.bat
    ```
 
 ---
@@ -214,15 +223,15 @@ This guide provides solutions for common issues encountered when running the MH 
 
 **Solution:**
 
-1. **For source folders** (`C:\Users\iaq\Desktop\Task_Logger_Data`, etc.):
+1. **For source folders** (paths configured in `data_config.json` → `local_sources`):
    - Verify these folders exist and contain data
    - Right-click the folder → **Properties** → **Security**
-   - Ensure `iaq` user has **Read** and **Read & Execute** permissions
+   - Ensure the current user has **Read** and **Read & Execute** permissions
 
-2. **For network drives** (`\\mission...`, `\\elwood...`):
+2. **For network drives** (paths configured in `data_config.json` → `remote_destinations`):
    - Verify you can access these drives manually (see [Installation Guide](INSTALLATION.md))
-   - If accessible, contact IT to add `iaq` account permissions
-   - Provide: Computer name (`iaq@...`), network drive path, and request **Write** access
+   - If accessible, contact IT to add account permissions
+   - Provide: Computer name, network drive path, and request **Write** access
 
 3. Test the backup after permissions are updated:
    ```
@@ -239,13 +248,12 @@ This guide provides solutions for common issues encountered when running the MH 
 
 1. Verify the source folders exist:
    - Open **File Explorer** on the DAQ computer
-   - Navigate to: `C:\Users\iaq\Desktop\`
-   - Check for folders: `Task_Logger_Data` and `Outdoor_Data`
+   - Navigate to the paths configured in `data_config.json` → `local_sources.indoor_daq.path` and `local_sources.outdoor_weather.path`
+   - Check that the folders are present and contain data
 
-2. If the folders don't exist:
-   - Check if DAQ data is being saved to a different location on the desktop
-   - If you find it, update the paths in the Python scripts (see [Configuration Guide](CONFIGURATION.md), "Customizing Paths")
-   - Contact Nathan Lima if you're unsure
+2. If the folders don't exist or are in a different location:
+   - Update the paths in `data_config.json` under `local_sources`
+   - Contact Nathan Lima if you're unsure of the correct paths
 
 3. If folders exist but are empty:
    - Verify the DAQ instruments (Task Logger, weather station) are running and saving data
@@ -256,26 +264,22 @@ This guide provides solutions for common issues encountered when running the MH 
 
 #### Error: "Destination folder not found" OR "Cannot write to destination"
 
-**Cause:** The destination network path doesn't exist or `iaq` account lacks write permissions.
+**Cause:** The destination network path doesn't exist or the user account lacks write permissions.
 
 **Solution:**
 
 1. Verify the destination paths are correct:
-   - Check `run_backup.bat` for the correct network paths
-   - These should be:
-     ```
-     \\mission.el.nist.gov\Programs\energy_netzero\ventilation_iaq\Manufactured House\DAQ_Data\raw_data\
-     \\elwood.nist.gov\732_EL\732\internal\IAQ\EPA Shower\MH DAQ\
-     ```
+   - Open `data_config.json` and check the `remote_destinations` section
+   - Confirm the `base_path` values match the actual network share structure
 
 2. Manually access the network drives:
    - Open **File Explorer** → **Map network drive**
-   - Try mapping `\\mission.el.nist.gov\Programs\...`
+   - Try mapping the path from `data_config.json` → `remote_destinations.mission.base_path`
    - If this fails, the path is wrong or network is unreachable
 
 3. Request IT assistance:
    - Provide the network path and your computer name
-   - Request **Read/Write** access for the `iaq` account
+   - Request **Read/Write** access for the user account
 
 ---
 
@@ -289,7 +293,7 @@ This guide provides solutions for common issues encountered when running the MH 
 
 1. Verify the batch file exists:
    ```
-   dir C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\run_backup.bat
+   dir <repo_path>\scripts\run_backup.bat
    ```
    > If no file is listed, the batch file is not in that folder
 
@@ -300,7 +304,7 @@ This guide provides solutions for common issues encountered when running the MH 
 
 3. Update your command to use the correct path:
    ```
-   C:\path\to\run_backup.bat
+   <actual_path>\run_backup.bat
    ```
 
 4. If the batch file doesn't exist anywhere:
@@ -310,7 +314,7 @@ This guide provides solutions for common issues encountered when running the MH 
 
 #### Error: `%CONDA_PATH%` is not set OR Cannot find conda
 
-**Cause:** The batch file's `CONDA_PATH` variable is incorrect or conda is not installed.
+**Cause:** The batch file's `CONDA_ACTIVATE` variable is incorrect or conda is not installed.
 
 **Solution:**
 
@@ -318,15 +322,14 @@ This guide provides solutions for common issues encountered when running the MH 
    ```
    conda info --base
    ```
-   > Note the path (e.g., `C:\Users\iaq\AppData\Local\miniforge3`)
+   > Note the path — this is `<conda_path>`
 
-2. Edit `C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\run_backup.bat`:
+2. Edit `<repo_path>\scripts\run_backup.bat`:
    - Open in **Notepad**
-   - Find the line: `set CONDA_PATH=...`
-   - Update it to match the path from step 1
-   - Example:
+   - Find the line: `set CONDA_ACTIVATE=...`
+   - Update it to:
      ```batch
-     set CONDA_PATH=C:\Users\iaq\AppData\Local\miniforge3
+     set CONDA_ACTIVATE=<conda_path>\Scripts\activate.bat
      ```
    - Save the file
 
@@ -373,7 +376,7 @@ This guide provides solutions for common issues encountered when running the MH 
 **Solution:**
 
 1. Monitor the log file while the task runs:
-   - Open `C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\batch_output.log` in a text editor
+   - Open `<repo_path>\scripts\batch_output.log` in a text editor
    - Keep the window open and refresh periodically (F5)
    - Look for messages that indicate where it's stuck
 
@@ -387,7 +390,7 @@ This guide provides solutions for common issues encountered when running the MH 
 3. If specific backups are failing:
    - Run each script manually to identify the problem:
      ```
-     cd C:\Users\iaq\Building423_IAQ-MH_DAQ\src
+     cd <repo_path>\src
      python mh_daq_file_backup.py
      python epa_shower_file_backup.py
      python ecobee_thermostat_backup.py
@@ -421,18 +424,18 @@ To verify the system is working correctly:
 
 1. **Test manual backup:**
    ```
-   C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\run_backup.bat
+   <repo_path>\scripts\run_backup.bat
    ```
    > Wait for the command prompt to close
 
 2. **Check the log:**
-   - Open `C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\batch_output.log`
+   - Open `<repo_path>\scripts\batch_output.log`
    - Look for `COMPLETED SUCCESSFULLY` messages for each script
    - Verify timestamps are recent (within the last few minutes)
 
 3. **Verify data was backed up:**
    - Open **File Explorer**
-   - Navigate to `\\mission.el.nist.gov\Programs\energy_netzero\ventilation_iaq\Manufactured House\DAQ_Data\raw_data\`
+   - Navigate to the path in `data_config.json` → `remote_destinations.mission.base_path`
    - Check that `indoor_daq\` and `weather_station\` folders contain files
    - Look at **Date Modified** to confirm files are from today
 
