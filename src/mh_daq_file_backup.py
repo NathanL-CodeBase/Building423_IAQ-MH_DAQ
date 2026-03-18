@@ -1,26 +1,27 @@
 # %%
 """
 Instrument Data Backup Script
+==============================
 
 This script performs automated backups of instrument data from local desktop folders
 to network storage locations. It backs up two types of data:
-    1. Indoor DAQ data from Task Logger
-    2. Outdoor weather station data
+    1. Indoor DAQ data from Task Logger (cDAQ-9178 chassis)
+    2. Outdoor weather station data (Met One AIO2 serial logger)
 
 The script performs incremental backups by comparing file modification times,
 only copying files that are new or have been updated since the last backup.
-Separate log files are maintained for each data type in their respective
-destination folders.
+A single consolidated backup log is maintained at the mission network root.
 
-Source Locations:
-    - Indoor DAQ: C:\\Users\\iaq\\Desktop\\Task_Logger_Data
-    - Weather Station: C:\\Users\\iaq\\Desktop\\Outdoor_Data
+All source and destination paths are loaded from data_config.json (not hardcoded).
+See data_config.template.json for the expected configuration structure.
 
-Destination Locations:
-    - Indoor DAQ: \\\\mission.el.nist.gov\\...\\raw_data\\indoor_daq
-    - Weather Station: \\\\mission.el.nist.gov\\...\\raw_data\\weather_station
+Output Files:
+    - <mission_base>/backup_log.txt:              Consolidated backup activity log
+    - <mission_base>/indoor_daq/:                 Incremental copy of Task Logger output
+    - <mission_base>/weather_station/:            Incremental copy of AIO2 weather data
 
 Author: Nathan Lima
+Institution: NIST
 Last Modified: 2026-01-05
 """
 
@@ -116,8 +117,9 @@ weather_dest = (
     else None
 )
 
-indoor_log = os.path.join(indoor_dest, "backup_log_indoor.txt") if indoor_dest else None
-weather_log = os.path.join(weather_dest, "backup_log_weather.txt") if weather_dest else None
+# Consolidated backup log at the mission network root (filename from config)
+mission_log_filename = mission_config.get("log_file", "backup_log.txt")
+mission_log = os.path.join(mission_base, mission_log_filename) if mission_base else None
 
 # Validate required paths are configured
 required_paths = {
@@ -125,6 +127,7 @@ required_paths = {
     "weather_source": weather_source,
     "indoor_dest": indoor_dest,
     "weather_dest": weather_dest,
+    "mission_log": mission_log,
 }
 
 local_logger.info("Validating configuration paths...")
@@ -276,13 +279,34 @@ def main():
     """
     Main execution block for instrument data backup.
 
-    Sets up separate loggers for indoor DAQ and weather station data, then
-    performs sequential backups of both data sources to their respective
-    network locations. Each backup operation is logged independently.
+    Sets up a single consolidated network logger at the mission base path, then
+    performs sequential backups of both the indoor DAQ and weather station data.
+    Both operations write to the same network log file (backup_log.txt at the
+    mission root, as configured in data_config.json).
     """
 
-    # Track overall success
+    # Track overall success across both backup operations
     all_successful = True
+
+    # -----------------------------------------------------------------------
+    # Set up consolidated mission network logger
+    # -----------------------------------------------------------------------
+    if check_network_path(mission_base):
+        local_logger.info(f"Mission network path accessible: {mission_base}")
+        network_logger = setup_network_logger("mission_backup", mission_log)
+        if not network_logger:
+            local_logger.warning(
+                "Network logger setup failed — backup will proceed with local logging only."
+            )
+    else:
+        local_logger.error(f"Mission network path NOT accessible: {mission_base}")
+        local_logger.error("All backups will be skipped. Check network connection.")
+        local_logger.warning("BACKUPS SKIPPED — network unavailable.")
+        local_logger.info("=" * 60)
+        return
+
+    network_logger.info("=" * 40)
+    network_logger.info("MH DAQ backup session started.")
 
     # -----------------------------------------------------------------------
     # Indoor DAQ Backup
@@ -290,34 +314,17 @@ def main():
     local_logger.info("-" * 40)
     local_logger.info("INDOOR DAQ BACKUP")
     local_logger.info("-" * 40)
+    network_logger.info("Indoor DAQ backup started.")
 
-    # Check network accessibility
-    if check_network_path(indoor_dest):
-        local_logger.info(f"Network path accessible: {indoor_dest}")
-        indoor_logger = setup_network_logger("indoor_daq", indoor_log)
-        if not indoor_logger:
-            local_logger.warning(
-                "Network logger setup failed, but backup will proceed with local logging only"
-            )
-    else:
-        local_logger.error(f"Network path NOT accessible: {indoor_dest}")
-        local_logger.error("Backup will be skipped. Check network connection.")
-        indoor_logger = None
+    copied, skipped, errs = backup_files(indoor_source, indoor_dest, network_logger)
+    local_logger.info(
+        f"Indoor DAQ complete: {copied} copied, {skipped} unchanged, {errs} errors"
+    )
+    network_logger.info(
+        f"Indoor DAQ complete: {copied} copied, {skipped} unchanged, {errs} errors"
+    )
+    if errs > 0:
         all_successful = False
-
-    # Perform backup if network is accessible
-    if indoor_logger:
-        indoor_logger.info("Indoor DAQ backup started.")
-        copied, skipped, errs = backup_files(indoor_source, indoor_dest, indoor_logger)
-        local_logger.info(
-            f"Indoor DAQ complete: {copied} copied, {skipped} unchanged, {errs} errors"
-        )
-        if indoor_logger:
-            indoor_logger.info(
-                f"Backup completed: {copied} copied, {skipped} unchanged, {errs} errors"
-            )
-        if errs > 0:
-            all_successful = False
 
     # -----------------------------------------------------------------------
     # Weather Station Backup
@@ -325,34 +332,17 @@ def main():
     local_logger.info("-" * 40)
     local_logger.info("WEATHER STATION BACKUP")
     local_logger.info("-" * 40)
+    network_logger.info("Weather station backup started.")
 
-    # Check network accessibility
-    if check_network_path(weather_dest):
-        local_logger.info(f"Network path accessible: {weather_dest}")
-        weather_logger = setup_network_logger("weather_station", weather_log)
-        if not weather_logger:
-            local_logger.warning(
-                "Network logger setup failed, but backup will proceed with local logging only"
-            )
-    else:
-        local_logger.error(f"Network path NOT accessible: {weather_dest}")
-        local_logger.error("Backup will be skipped. Check network connection.")
-        weather_logger = None
+    copied, skipped, errs = backup_files(weather_source, weather_dest, network_logger)
+    local_logger.info(
+        f"Weather station complete: {copied} copied, {skipped} unchanged, {errs} errors"
+    )
+    network_logger.info(
+        f"Weather station complete: {copied} copied, {skipped} unchanged, {errs} errors"
+    )
+    if errs > 0:
         all_successful = False
-
-    # Perform backup if network is accessible
-    if weather_logger:
-        weather_logger.info("Weather station backup started.")
-        copied, skipped, errs = backup_files(weather_source, weather_dest, weather_logger)
-        local_logger.info(
-            f"Weather station complete: {copied} copied, {skipped} unchanged, {errs} errors"
-        )
-        if weather_logger:
-            weather_logger.info(
-                f"Backup completed: {copied} copied, {skipped} unchanged, {errs} errors"
-            )
-        if errs > 0:
-            all_successful = False
 
     # -----------------------------------------------------------------------
     # Final Summary
@@ -360,18 +350,19 @@ def main():
     local_logger.info("-" * 40)
     if all_successful:
         local_logger.info("ALL BACKUPS COMPLETED SUCCESSFULLY")
+        network_logger.info("Backup session completed successfully.")
     else:
-        local_logger.warning("BACKUPS COMPLETED WITH ERRORS - Review log for details")
+        local_logger.warning("BACKUPS COMPLETED WITH ERRORS — Review log for details.")
+        network_logger.warning("Backup session completed with errors.")
+    network_logger.info("=" * 40)
     local_logger.info("=" * 60)
 
     # -----------------------------------------------------------------------
-    # Cleanup - Close all logger handlers
+    # Cleanup — Close network logger handlers
     # -----------------------------------------------------------------------
-    for logger in [indoor_logger, weather_logger]:
-        if logger:
-            for handler in logger.handlers[:]:
-                handler.close()
-                logger.removeHandler(handler)
+    for handler in network_logger.handlers[:]:
+        handler.close()
+        network_logger.removeHandler(handler)
 
 
 if __name__ == "__main__":

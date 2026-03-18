@@ -1,3 +1,37 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+EPA Shower Project Data Backup Script
+=======================================
+
+This script performs a targeted backup of a single year's instrument data from
+local desktop folders to the EPA Shower project network share (Elwood drive).
+It backs up two types of data:
+    1. Indoor DAQ data from Task Logger (cDAQ-9178 chassis)
+    2. Outdoor weather station data (Met One AIO2 serial logger)
+
+Unlike mh_daq_file_backup.py (which copies all data to the mission drive),
+this script copies only the archive year specified in data_config.json. It is
+a temporary supplement created for the 2026 EPA Shower project and will be
+removed once that project concludes.
+
+The script performs incremental backups by comparing file modification times,
+only copying files that are new or have been updated since the last backup.
+
+All source and destination paths are loaded from data_config.json (not hardcoded).
+See data_config.template.json for the expected configuration structure.
+
+Output Files:
+    - <epa_base>/indoor_daq/<year>/:          Incremental copy of Task Logger output
+    - <epa_base>/weather_station/<year>/:     Incremental copy of AIO2 weather data
+    - <epa_base>/indoor_daq/backup_log_indoor.txt:    Indoor backup activity log
+    - <epa_base>/weather_station/backup_log_weather.txt: Weather backup activity log
+
+Author: Nathan Lima
+Institution: NIST
+Date: 2026
+"""
+
 import json
 import logging
 import os
@@ -286,18 +320,20 @@ def main():
     Main execution block for EPA Shower data backup.
 
     Sets up separate loggers for indoor DAQ and weather station data, then
-    performs sequential backups of both data sources (2026 only) to their
-    respective network locations. Each backup operation is logged independently.
+    performs sequential backups of both data sources (archive year only, as
+    set by remote_destinations.epa_shower.archive_year in data_config.json)
+    to their respective network locations on the Elwood drive.
+    Each backup operation is logged independently.
     """
 
     # Track overall success
     all_successful = True
 
     # -----------------------------------------------------------------------
-    # Indoor DAQ Backup (2026)
+    # Indoor DAQ Backup (archive year)
     # -----------------------------------------------------------------------
     local_logger.info("-" * 40)
-    local_logger.info("INDOOR DAQ BACKUP (2026)")
+    local_logger.info(f"INDOOR DAQ BACKUP ({archive_year})")
     local_logger.info("-" * 40)
 
     # Check network accessibility
@@ -316,7 +352,7 @@ def main():
 
     # Perform backup if network is accessible
     if indoor_logger:
-        indoor_logger.info("Indoor DAQ backup (2026) started.")
+        indoor_logger.info(f"Indoor DAQ backup ({archive_year}) started.")
         copied, skipped, errs = backup_files(indoor_source, indoor_dest, indoor_logger)
         local_logger.info(
             f"Indoor DAQ complete: {copied} copied, {skipped} unchanged, {errs} errors"
@@ -329,10 +365,10 @@ def main():
             all_successful = False
 
     # -----------------------------------------------------------------------
-    # Weather Station Backup (2026)
+    # Weather Station Backup (archive year)
     # -----------------------------------------------------------------------
     local_logger.info("-" * 40)
-    local_logger.info("WEATHER STATION BACKUP (2026)")
+    local_logger.info(f"WEATHER STATION BACKUP ({archive_year})")
     local_logger.info("-" * 40)
 
     # Check network accessibility
@@ -351,7 +387,7 @@ def main():
 
     # Perform backup if network is accessible
     if weather_logger:
-        weather_logger.info("Weather station backup (2026) started.")
+        weather_logger.info(f"Weather station backup ({archive_year}) started.")
         copied, skipped, errs = backup_files(weather_source, weather_dest, weather_logger)
         local_logger.info(
             f"Weather station complete: {copied} copied, {skipped} unchanged, {errs} errors"

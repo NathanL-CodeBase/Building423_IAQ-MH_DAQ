@@ -124,19 +124,26 @@ TOKEN_FILE_PATH = Path(
     os.getenv("ECOBEE_TOKEN_FILE", Path.home() / "scripts" / "ecobee_tokens.json")
 )
 
-# Destination directory from config
+# Destination directory from config — no hardcoded fallback, fail clearly if missing
 thermostat_config = config.get("remote_destinations", {}).get("thermostat", {})
-THERMOSTAT_DEST = thermostat_config.get(
-    "base_path",
-    r"\\mission.el.nist.gov\Programs\energy_netzero\ventilation_iaq\Manufactured House\DAQ_Data\raw_data\thermostat",
-)
+THERMOSTAT_DEST = thermostat_config.get("base_path")
+if not THERMOSTAT_DEST:
+    raise ValueError(
+        "Configuration missing required value: remote_destinations.thermostat.base_path. "
+        "Add this path to data_config.json."
+    )
 THERMOSTAT_LOG = os.path.join(
     THERMOSTAT_DEST, thermostat_config.get("log_file", "backup_log_thermostat.txt")
 )
 
-# Thermostat identifier from environment variable or config
-# Get from environment variable for security, fall back to config
-THERMOSTAT_ID = os.getenv("ECOBEE_THERMOSTAT_ID", "511879526877")
+# Thermostat identifier — from environment variable (takes priority) or data_config.json
+# Environment variable: set ECOBEE_THERMOSTAT_ID before running to override the config value
+THERMOSTAT_ID = os.getenv("ECOBEE_THERMOSTAT_ID") or thermostat_config.get("thermostat_id")
+if not THERMOSTAT_ID:
+    raise ValueError(
+        "Thermostat ID not configured. Set ECOBEE_THERMOSTAT_ID environment variable "
+        "or add remote_destinations.thermostat.thermostat_id to data_config.json."
+    )
 
 # Target date override — set to a specific date string "YYYY-MM-DD" to backfill
 # a missed day, or leave as None to always fetch yesterday.

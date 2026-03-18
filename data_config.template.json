@@ -45,11 +45,10 @@
       "archive_year": 2026
     },
     "thermostat": {
-      "description": "Ecobee thermostat data backup (OPTIONAL - coming soon)",
+      "description": "Ecobee thermostat data backup",
       "base_path": "\\\\YOUR_SERVER\\YOUR_SHARE\\...\\thermostat",
-      "log_file": "backup_log_thermostat.txt"
+      "log_file": "backup_log_thermostat.txt",
+      "thermostat_id": "YOUR_THERMOSTAT_ID"
     }
-  }
-}
   }
 }
