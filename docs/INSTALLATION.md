@@ -76,10 +76,11 @@ After cloning, verify that all files are in place:
    Building423_IAQ-MH_DAQ/
    ├── docs/                    (documentation)
    ├── src/                     (Python scripts)
-   ├── scripts/                 (batch files and schedulers)
+   ├── scripts/                 (batch files)
    ├── README.md
    ├── LICENSE.md
-   └── CODEMETA.yaml
+   ├── CODEMETA.yaml
+   └── data_config.template.json  (copy this to data_config.json and edit paths)
    ```
 3. The Python backup scripts are in: `C:\Users\iaq\Building423_IAQ-MH_DAQ\src\`
 4. The batch file is in: `C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\`
@@ -124,15 +125,12 @@ Now run the backup manually to make sure everything works. Choose one of the two
    ```
    run_backup.bat
    ```
-4. You should see messages similar to:
-   ```
-   Backing up DAQ files...
-   Backing up EPA Shower files...
-   Backing up Ecobee data...
-   Process complete. Check batch_output.log for details.
-   ```
+4. The command prompt window will appear briefly while the scripts run, then close automatically. All output is written to `batch_output.log` — there is no console output displayed.
 
-5. The command prompt will close automatically when finished
+5. Open `batch_output.log` immediately after to confirm the scripts ran:
+   ```
+   C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\batch_output.log
+   ```
 
 ### Option B: Using File Explorer
 
@@ -148,12 +146,12 @@ Now run the backup manually to make sure everything works. Choose one of the two
 1. Open **File Explorer** and navigate to `C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\`
 2. Open the file **`batch_output.log`** in **Notepad**
 3. Look for these messages (one for each backup):
-   - `DAQ backup successful` or `Backed up X new files`  
-   - `EPA Shower backup successful`
-   - Ecobee message (if configured — see [Configuration Guide](CONFIGURATION.md))
+   - `ALL BACKUPS COMPLETED SUCCESSFULLY` (from `mh_daq_file_backup.py`)
+   - `ALL EPA SHOWER BACKUPS COMPLETED SUCCESSFULLY` (from `epa_shower_file_backup.py`)
+   - `ECOBEE BACKUP COMPLETED SUCCESSFULLY` (from `ecobee_thermostat_backup.py`)
 
 4. **Check for errors:**
-   - Look for lines starting with `ERROR:`
+   - Look for lines containing `ERROR` or `NOT accessible`
    - If errors appear, see the [Troubleshooting Guide](TROUBLESHOOTING.md)
 
 ---
@@ -183,11 +181,13 @@ Before considering deployment complete, confirm:
 
 - Python and pandas are installed
 - Repository is cloned to `C:\Users\iaq\Building423_IAQ-MH_DAQ\`
-- `run_backup.bat` paths are correct (should reference the cloned repo)
+- `run_backup.bat` paths are correct (references scripts in the cloned repo)
+- `data_config.json` created from template with correct local and network paths
 - Manual backup test completed successfully
 - Log file shows no errors
 - DAQ data appeared on mission network drive
 - EPA Shower data appeared on elwood network drive (if used)
+- Ecobee token file created and first thermostat backup succeeded
 
 ---
 
@@ -195,7 +195,7 @@ Before considering deployment complete, confirm:
 
 If you encounter any issues:
 
-1. **Check the log file:** `C:\Users\iaq\Scripts\batch_output.log`
+1. **Check the log file:** `C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\batch_output.log`
 2. **Read the error message** and look it up in the [Troubleshooting Guide](TROUBLESHOOTING.md)
 3. **Contact Nathan Lima** with the error message and log file contents
 

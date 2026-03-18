@@ -6,8 +6,8 @@ This guide provides solutions for common issues encountered when running the MH 
 
 ## Quick Start: Finding Your Error
 
-1. Open `C:\Users\iaq\Scripts\batch_output.log` in **Notepad**
-2. Look for lines starting with `[ERROR]` or showing red text
+1. Open `C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\batch_output.log` in **Notepad**
+2. Look for lines containing `ERROR` or `NOT accessible`
 3. Find that error message in the table below
 4. Follow the solution steps
 
@@ -201,7 +201,7 @@ This guide provides solutions for common issues encountered when running the MH 
 3. Wait for the installation to complete
 4. Test the backup again:
    ```
-   C:\Users\iaq\Scripts\run_backup.bat
+   C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\run_backup.bat
    ```
 
 ---
@@ -289,7 +289,7 @@ This guide provides solutions for common issues encountered when running the MH 
 
 1. Verify the batch file exists:
    ```
-   dir C:\Users\iaq\Scripts\run_backup.bat
+   dir C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\run_backup.bat
    ```
    > If no file is listed, the batch file is not in that folder
 
@@ -320,7 +320,7 @@ This guide provides solutions for common issues encountered when running the MH 
    ```
    > Note the path (e.g., `C:\Users\iaq\AppData\Local\miniforge3`)
 
-2. Edit `C:\Users\iaq\Scripts\run_backup.bat`:
+2. Edit `C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\run_backup.bat`:
    - Open in **Notepad**
    - Find the line: `set CONDA_PATH=...`
    - Update it to match the path from step 1
@@ -373,7 +373,7 @@ This guide provides solutions for common issues encountered when running the MH 
 **Solution:**
 
 1. Monitor the log file while the task runs:
-   - Open `C:\Users\iaq\Scripts\batch_output.log` in a text editor
+   - Open `C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\batch_output.log` in a text editor
    - Keep the window open and refresh periodically (F5)
    - Look for messages that indicate where it's stuck
 
@@ -387,12 +387,13 @@ This guide provides solutions for common issues encountered when running the MH 
 3. If specific backups are failing:
    - Run each script manually to identify the problem:
      ```
+     cd C:\Users\iaq\Building423_IAQ-MH_DAQ\src
      python mh_daq_file_backup.py
      python epa_shower_file_backup.py
      python ecobee_thermostat_backup.py
      ```
-   - (These are run from `C:\Users\iaq\Scripts\` where they were copied during deployment)
-   - Check the log for errors
+   - Running scripts directly prints output to the console, making errors easier to spot
+   - Check `batch_output.log` for the full output from scheduled runs
 
 ---
 
@@ -420,13 +421,13 @@ To verify the system is working correctly:
 
 1. **Test manual backup:**
    ```
-   C:\Users\iaq\Scripts\run_backup.bat
+   C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\run_backup.bat
    ```
    > Wait for the command prompt to close
 
 2. **Check the log:**
-   - Open `C:\Users\iaq\Scripts\batch_output.log`
-   - Look for `[SUCCESS]` messages
+   - Open `C:\Users\iaq\Building423_IAQ-MH_DAQ\scripts\batch_output.log`
+   - Look for `COMPLETED SUCCESSFULLY` messages for each script
    - Verify timestamps are recent (within the last few minutes)
 
 3. **Verify data was backed up:**
@@ -441,23 +442,27 @@ To verify the system is working correctly:
 
 ## Log File Format
 
-The `batch_output.log` file contains structured output. Here's what each section means:
+The `batch_output.log` file captures all Python script console output. Lines are formatted as:
 
 ```
-2026-03-17 06:00:00 ========== MH DAQ BACKUP STARTED ==========
-[DEBUG] Conda environment activated
-[INFO] Starting backup sequence...
-[INFO] Running: mh_daq_file_backup.py
-[SUCCESS] Backed up 5 new files to \\mission...
-[INFO] Running: epa_shower_file_backup.py
-[SUCCESS] EPA Shower backup complete
-[INFO] Running: ecobee_thermostat_backup.py
-[SUCCESS] Fetched Ecobee data for 2026-03-16
-2026-03-17 06:05:42 ========== MH DAQ BACKUP COMPLETE ==========
+Backup started: Wed 03/17/2026  6:00:00.00
+============================================================
+2026-03-17 06:00:01,123 - INFO - Script started
+2026-03-17 06:00:01,124 - INFO - Loading configuration...
+2026-03-17 06:00:01,456 - INFO - ----------------------------------------
+2026-03-17 06:00:01,457 - INFO - INDOOR DAQ BACKUP
+2026-03-17 06:00:01,458 - INFO - ----------------------------------------
+2026-03-17 06:00:02,100 - INFO - Copied (new file): 20260317-Daily_MHIndoor_Data.txt
+2026-03-17 06:00:03,200 - INFO - Indoor DAQ complete: 1 copied, 42 unchanged, 0 errors
+...
+2026-03-17 06:00:10,000 - INFO - ALL BACKUPS COMPLETED SUCCESSFULLY
+============================================================
+Backup finished: Wed 03/17/2026  6:00:10.12
 ```
 
-- **[DEBUG]** = Detailed technical information (can usually be ignored)
-- **[INFO]** = Task progress (informational only)
-- **[SUCCESS]** = Task completed without errors
-- **[ERROR]** = Task failed (needs investigation)
-- **[WARNING]** = Potential issue but task continued (may need attention)
+- **`- INFO -`** = Normal progress messages
+- **`- WARNING -`** = Potential issue but backup continued (review if recurring)
+- **`- ERROR -`** = Something failed (investigate this)
+- Lines with `NOT accessible` = Network path unreachable
+- Lines with `COMPLETED SUCCESSFULLY` = That script finished without errors
+- Lines with `COMPLETED WITH ERRORS` = That script had failures — check surrounding `ERROR` lines

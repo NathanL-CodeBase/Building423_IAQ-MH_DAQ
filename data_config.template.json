@@ -1,19 +1,19 @@
-﻿{
+{
   "description": "NIST Building 423 IAQ Manufactured House DAQ - Configuration Template",
   "machine_name": "YOUR_MACHINE_NAME",
   "project_name": "Building 423 IAQ Manufactured House - Data Acquisition and Backup System",
-  "last_updated": "2026-03-18",
+  "last_updated": "YYYY-MM-DD",
 
   "_setup_instructions": [
     "1. Copy this file to 'data_config.json' in the repository root",
-    "2. Replace all YOUR_* placeholders with your actual network paths",
-    "3. Verify network paths are accessible before running scripts",
-    "4. For sensitive data (API keys): use environment variables, NOT in config",
-    "5. Keep data_config.json in .gitignore - each user maintains their own copy"
+    "2. Replace all YOUR_* placeholders with your actual values",
+    "3. Verify all network paths are accessible before running scripts",
+    "4. Sensitive data (API keys, tokens): use environment variables, NOT this file",
+    "5. Keep data_config.json in .gitignore — each deployment maintains its own copy"
   ],
 
   "local_sources": {
-    "description": "Local desktop source folders - EDIT THESE PATHS FOR YOUR SYSTEM",
+    "description": "Local desktop source folders on DAQ computer — EDIT THESE PATHS",
     "indoor_daq": {
       "path": "C:\\Users\\YOUR_USERNAME\\Desktop\\Task_Logger_Data",
       "description": "Task Logger output (indoor DAQ data from cDAQ-9178 chassis)"
@@ -25,9 +25,10 @@
   },
 
   "remote_destinations": {
-    "description": "Network backup destinations - EDIT THESE PATHS FOR YOUR SYSTEM",
+    "description": "Network storage destinations — EDIT THESE PATHS",
+
     "mission": {
-      "description": "Primary backup - Mission network drive (all data)",
+      "description": "Primary backup location - Mission network drive (all data, all dates)",
       "base_path": "\\\\YOUR_SERVER\\YOUR_SHARE\\...\\DAQ_Data\\raw_data",
       "folders": {
         "indoor_daq": "indoor_daq",
@@ -35,20 +36,37 @@
       },
       "log_file": "backup_log.txt"
     },
+
     "epa_shower": {
-      "description": "EPA project backup - 2026 data only (TEMPORARY - will be removed)",
+      "description": "EPA Shower project backup - selected year only (TEMPORARY)",
       "base_path": "\\\\YOUR_SERVER\\YOUR_SHARE\\EPA_Shower\\MH DAQ",
       "folders": {
         "indoor_daq": "indoor_daq",
         "weather_station": "weather_station"
       },
-      "archive_year": 2026
+      "archive_year": 2026,
+      "notes": "Temporary backup for EPA Shower project — remove this section when project concludes"
     },
+
     "thermostat": {
-      "description": "Ecobee thermostat data backup",
+      "description": "Ecobee thermostat data backup - daily 5-minute interval CSVs",
       "base_path": "\\\\YOUR_SERVER\\YOUR_SHARE\\...\\thermostat",
       "log_file": "backup_log_thermostat.txt",
-      "thermostat_id": "YOUR_THERMOSTAT_ID"
+      "thermostat_id": "YOUR_THERMOSTAT_ID",
+      "_thermostat_id_note": "Thermostat ID can also be set via ECOBEE_THERMOSTAT_ID environment variable (takes priority over this value)"
     }
-  }
+  },
+
+  "_environment_variables": {
+    "description": "These environment variables can override values in this config file",
+    "ECOBEE_TOKEN_FILE": "Full path to ecobee_tokens.json (default: ~/scripts/ecobee_tokens.json)",
+    "ECOBEE_THERMOSTAT_ID": "Ecobee thermostat ID — overrides remote_destinations.thermostat.thermostat_id",
+    "TARGET_DATE_OVERRIDE": "YYYY-MM-DD — forces ecobee_thermostat_backup.py to fetch a specific past date (backfill)"
+  },
+
+  "_path_format_note": [
+    "Windows network paths in JSON require double backslashes: \\\\\\\\server\\\\share\\\\folder",
+    "This represents the actual path: \\\\server\\share\\folder",
+    "Python normalizes forward and backward slashes, so either works in practice"
+  ]
 }

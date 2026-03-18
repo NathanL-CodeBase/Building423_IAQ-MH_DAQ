@@ -22,7 +22,7 @@ The system:
 1. **Backs up indoor DAQ data** from the Task Logger to the mission network drive (all data)
 2. **Backs up outdoor weather station data** (AIO2) to the mission network drive (all data)  
 3. **Backs up selected 2026 data** to the EPA Shower project share (temporary — will be deprecated)
-4. **Downloads thermostat data** from the Ecobee4 thermostat (coming soon — currently in development)
+4. **Downloads thermostat data** from the Ecobee4 thermostat via the Ecobee API (daily 5-minute interval runtime data)
 
 **Note:** All three backup scripts reference the same configuration file (`data_config.json`). The EPA Shower backup is a separate project-specific target that will be removed after the EPA project concludes.
 
@@ -39,7 +39,7 @@ Building423_IAQ-MH_DAQ/
 ├── src/                               # Python source code (for development)
 │   ├── mh_daq_file_backup.py         # Main DAQ data backup
 │   ├── epa_shower_file_backup.py     # EPA Shower project backup
-│   ├── ecobee_thermostat_backup.py   # Ecobee thermostat data download (coming soon)
+│   ├── ecobee_thermostat_backup.py   # Ecobee thermostat data download
 │   └── ecobee_token_setup.py         # Ecobee API setup (one-time)
 ├── scripts/                           # Deployment scripts
 │   └── run_backup.bat                # Batch file to run all backups in sequence
@@ -58,7 +58,7 @@ Building423_IAQ-MH_DAQ/
 | **DAQ Backup** (Task Logger) | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
 | **Weather Station Backup** | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
 | **EPA Shower Backup** | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
-| **Ecobee Thermostat Data** | **In Development** | Script ready; API integration in progress |
+| **Ecobee Thermostat Data** | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
 | **Splinterware Scheduler** | **Planned** | Currently running backups manually; will automate with nightly scheduling |
 
 ---
@@ -88,7 +88,7 @@ Building423_IAQ-MH_DAQ/
 ## Key Features
 
 **Incremental Backups** — Only copies files that have changed (compares modification times)   
-**Ecobee Integration** — Automatic download of 5-minute interval thermostat data (coming soon)  
+**Ecobee Integration** — Automatic download of 5-minute interval thermostat data via Ecobee API
 **Error Logging** — Detailed logs for troubleshooting and audit trails  
 **Manual & Automated** — Run manually on-demand or schedule with Splinterware System Scheduler  
 **Smart Retry Logic** — Handles token refresh and network timeouts gracefully  
@@ -108,9 +108,9 @@ Building423_IAQ-MH_DAQ/
 - **pandas library** (install once in base conda environment)
 - **Windows command prompt/PowerShell** to run batch files
 
-### For Ecobee Thermostat Data (Coming Soon)
-- **Ecobee account** with thermostat (ID: `511879526877`)
-- **Ecobee API key** (obtained from developer portal — see [Configuration Guide](docs/CONFIGURATION.md))
+### For Ecobee Thermostat Data
+- **Ecobee account** with thermostat (thermostat ID configured in `data_config.json`)
+- **Ecobee API key** and authorized token file (see [Configuration Guide](docs/CONFIGURATION.md))
 - **Internet access** from the DAQ computer to reach `api.ecobee.com`
 
 ---
@@ -123,7 +123,7 @@ All backed-up data is organized by source and date:
 \\mission.el.nist.gov\Programs\energy_netzero\ventilation_iaq\Manufactured House\DAQ_Data\raw_data\
     ├── indoor_daq\          ← Task Logger files
     ├── weather_station\     ← Outdoor weather station files  
-    └── thermostat\          ← Ecobee4 runtime CSVs (coming soon)
+    └── thermostat\          ← Ecobee4 runtime CSVs
         └── YYYY\
             └── YYYY-MM-DD_thermostat.csv
 ```
