@@ -1,0 +1,55 @@
+﻿{
+  "description": "NIST Building 423 IAQ Manufactured House DAQ - Configuration Template",
+  "machine_name": "YOUR_MACHINE_NAME",
+  "project_name": "Building 423 IAQ Manufactured House - Data Acquisition and Backup System",
+  "last_updated": "2026-03-18",
+
+  "_setup_instructions": [
+    "1. Copy this file to 'data_config.json' in the repository root",
+    "2. Replace all YOUR_* placeholders with your actual network paths",
+    "3. Verify network paths are accessible before running scripts",
+    "4. For sensitive data (API keys): use environment variables, NOT in config",
+    "5. Keep data_config.json in .gitignore - each user maintains their own copy"
+  ],
+
+  "local_sources": {
+    "description": "Local desktop source folders - EDIT THESE PATHS FOR YOUR SYSTEM",
+    "indoor_daq": {
+      "path": "C:\\Users\\YOUR_USERNAME\\Desktop\\Task_Logger_Data",
+      "description": "Task Logger output (indoor DAQ data from cDAQ-9178 chassis)"
+    },
+    "outdoor_weather": {
+      "path": "C:\\Users\\YOUR_USERNAME\\Desktop\\Outdoor_Data",
+      "description": "Met One AIO2 weather station data via serial logger"
+    }
+  },
+
+  "remote_destinations": {
+    "description": "Network backup destinations - EDIT THESE PATHS FOR YOUR SYSTEM",
+    "mission": {
+      "description": "Primary backup - Mission network drive (all data)",
+      "base_path": "\\\\YOUR_SERVER\\YOUR_SHARE\\...\\DAQ_Data\\raw_data",
+      "folders": {
+        "indoor_daq": "indoor_daq",
+        "weather_station": "weather_station"
+      },
+      "log_file": "backup_log.txt"
+    },
+    "epa_shower": {
+      "description": "EPA project backup - 2026 data only (TEMPORARY - will be removed)",
+      "base_path": "\\\\YOUR_SERVER\\YOUR_SHARE\\EPA_Shower\\MH DAQ",
+      "folders": {
+        "indoor_daq": "indoor_daq",
+        "weather_station": "weather_station"
+      },
+      "archive_year": 2026
+    },
+    "thermostat": {
+      "description": "Ecobee thermostat data backup (OPTIONAL - coming soon)",
+      "base_path": "\\\\YOUR_SERVER\\YOUR_SHARE\\...\\thermostat",
+      "log_file": "backup_log_thermostat.txt"
+    }
+  }
+}
+  }
+}
