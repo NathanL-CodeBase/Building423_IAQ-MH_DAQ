@@ -68,5 +68,128 @@
     "Windows network paths in JSON require double backslashes: \\\\\\\\server\\\\share\\\\folder",
     "This represents the actual path: \\\\server\\share\\folder",
     "Python normalizes forward and backward slashes, so either works in practice"
-  ]
+  ],
+
+  "instruments": {
+    "_note": "Document active instruments here — used for reference and future scripting. Not required by backup scripts.",
+
+    "AIO2": {
+      "description": "Met One AIO 2 Sonic Weather Sensor",
+      "manufacturer": "Met One Instruments",
+      "model": "AIO 2",
+      "connection": "Serial (RS-232) — separate from cDAQ",
+      "variables": [
+        "Wind_Speed_m/s",
+        "Wind_Direction_deg",
+        "Ambient_Temperature_degC",
+        "Relative_Humidity_%",
+        "Barometric_Pressure_mb"
+      ],
+      "status": "ACTIVE",
+      "notes": ["Sensor installed on MET Tower. Data logged via serial output."]
+    },
+
+    "Setra_264": {
+      "description": "Setra Model 264 Very Low Differential Pressure Transducer",
+      "manufacturer": "Setra Systems",
+      "model": "Model 264",
+      "output": "0-5 VDC",
+      "daq_connection": "Module 1 (NI 9201) CH0-7, Module 2 (NI 9201) CH0-2",
+      "status": "DISCONNECTED",
+      "notes": ["List channel assignments here once reconnected."]
+    },
+
+    "Vaisala_HMP155": {
+      "description": "Vaisala HUMICAP HMP155 Humidity and Temperature Probe",
+      "manufacturer": "Vaisala",
+      "model": "HMP155",
+      "output": "0-10 VDC",
+      "daq_connection": "Modules 3-5 (NI 9201)",
+      "serial_numbers": {
+        "YOUR_SERIAL_1": {"location": "YOUR_LOCATION", "calibration_date": "YYYY-MM-DD"},
+        "YOUR_SERIAL_2": {"location": "YOUR_LOCATION", "calibration_date": "YYYY-MM-DD"}
+      },
+      "status": "ACTIVE",
+      "notes": ["Replace serial numbers and calibration dates with actual values."]
+    },
+
+    "Vaisala_HMP45A": {
+      "description": "Vaisala HUMICAP HMP45A Humidity and Temperature Probe",
+      "manufacturer": "Vaisala",
+      "model": "HMP45A",
+      "output": "0-1 VDC",
+      "daq_connection": "Modules 3-5 (NI 9201)",
+      "serial_numbers": {
+        "YOUR_SERIAL_1": {"location": "YOUR_LOCATION", "calibration_date": "YYYY-MM-DD"}
+      },
+      "status": "ACTIVE",
+      "notes": ["Legacy sensors — planned replacement with HMP155."]
+    },
+
+    "Ecobee4": {
+      "description": "ecobee4 Smart Wi-Fi Thermostat",
+      "manufacturer": "ecobee",
+      "model": "ecobee4",
+      "part_number": "EB-STATE4-01",
+      "serial_number": "YOUR_ECOBEE_SERIAL",
+      "connection": "Wi-Fi 802.11 b/g/n (2.4 GHz) — Ecobee Cloud API",
+      "data_interval_minutes": 5,
+      "status": "ACTIVE",
+      "notes": [
+        "Data retrieved via Ecobee Runtime Report API.",
+        "Thermostat ID used in remote_destinations.thermostat.thermostat_id must match this device."
+      ]
+    }
+  },
+
+  "future_instruments": {
+    "_note": "Document planned but not-yet-installed instruments here.",
+    "Thermocouple": {
+      "description": "Type T Thermocouples via NI 9213 Module",
+      "planned_daq_connection": "Module 8 (NI 9213) - NOT YET INSTALLED",
+      "status": "PLANNED"
+    }
+  },
+
+  "daq_system": {
+    "_note": "Document DAQ chassis and module configuration here.",
+    "chassis": {
+      "manufacturer": "National Instruments",
+      "model": "cDAQ-9178",
+      "slots": 8,
+      "interface": "Hi-Speed USB 2.0"
+    },
+    "installed_modules": {
+      "Slot_1": {"model": "NI 9201", "type": "8-ch AI (±10V)", "sensor": "YOUR_SENSOR", "status": "INSTALLED"},
+      "Slot_2": {"model": "NI 9201", "type": "8-ch AI (±10V)", "sensor": "YOUR_SENSOR", "status": "INSTALLED"},
+      "Slot_3": {"model": "NI 9201", "type": "8-ch AI (±10V)", "sensor": "YOUR_SENSOR", "status": "INSTALLED"},
+      "Slot_4": {"model": "NI 9201", "type": "8-ch AI (±10V)", "sensor": "YOUR_SENSOR", "status": "INSTALLED"},
+      "Slot_5": {"model": "NI 9201", "type": "8-ch AI (±10V)", "sensor": "YOUR_SENSOR", "status": "INSTALLED"},
+      "Slot_6": {"model": null, "type": null, "sensor": null, "status": "OPEN"},
+      "Slot_7": {"model": null, "type": null, "sensor": null, "status": "OPEN"},
+      "Slot_8": {"model": null, "type": null, "sensor": null, "status": "OPEN"}
+    }
+  },
+
+  "config_utilities": {
+    "description": "Helper information for scripts loading this config",
+    "python_setup": {
+      "example": "import json; from pathlib import Path; config = json.load(open('data_config.json'))",
+      "recommended_location": "Place data_config.json in the script's directory or project root"
+    },
+    "environment_variables": {
+      "description": "For sensitive data (API keys, tokens), use environment variables",
+      "examples": {
+        "ECOBEE_TOKEN_FILE": "Path to ecobee_tokens.json file (overrides default ~/scripts/ecobee_tokens.json)",
+        "ECOBEE_THERMOSTAT_ID": "Ecobee thermostat ID (overrides remote_destinations.thermostat.thermostat_id in config)",
+        "TARGET_DATE_OVERRIDE": "YYYY-MM-DD date string — forces ecobee_thermostat_backup.py to backfill a specific day"
+      }
+    },
+    "notes": [
+      "All paths can use either forward slashes (/) or backslashes (\\\\) - Python normalizes them",
+      "Network paths must be accessible before backup runs",
+      "Create data_config.json from data_config.template.json and customize for your system",
+      "Do NOT commit data_config.json with real paths to the repository"
+    ]
+  }
 }

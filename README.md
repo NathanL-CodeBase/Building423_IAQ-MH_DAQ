@@ -35,7 +35,8 @@ Building423_IAQ-MH_DAQ/
 ├── docs/                              # Documentation (read these first!)
 │   ├── INSTALLATION.md               # Quick start guide & deployment steps
 │   ├── CONFIGURATION.md              # Detailed setup & Ecobee configuration
-│   └── TROUBLESHOOTING.md            # Common issues and solutions
+│   ├── TROUBLESHOOTING.md            # Common issues and solutions
+│   └── instruments/                  # Instrument manuals, data sheets, and wiring docs
 ├── src/                               # Python source code (for development)
 │   ├── mh_daq_file_backup.py         # Main DAQ data backup
 │   ├── epa_shower_file_backup.py     # EPA Shower project backup
@@ -135,6 +136,33 @@ EPA Shower data also copies to:
     ├── indoor_daq\2026\
     └── weather_station\2026\
 ```
+
+---
+
+## Instrumentation
+
+Documentation for all instruments and hardware is in [docs/instruments/](docs/instruments/).
+
+### Active Instruments
+
+| Instrument | Type | Measurement | Documentation |
+|------------|------|-------------|---------------|
+| **Met One AIO 2** | Outdoor weather station (10m MET Tower) | Wind speed/direction, temperature, humidity, barometric pressure | [Manual](docs/instruments/AIO-2-9800-Manual-Rev-G.pdf), [Supplement](docs/instruments/AIO2-1.pdf) |
+| **Vaisala HMP155** | High-accuracy RH/T probe (×4) | Relative humidity, temperature | [User Guide](docs/instruments/Vaisala%20HMP155_User_Guide_in_English.pdf) |
+| **Vaisala HMP45A** | RH/T probe (×8, legacy) | Relative humidity, temperature | [User Guide](docs/instruments/Vaisala%20HMP45AD-User-Guide-U274EN.pdf) |
+| **ecobee4** | Smart Wi-Fi thermostat | Temperature, humidity, HVAC runtime | [Fact Sheet](docs/instruments/FactSheet-ecobee4.pdf) |
+| **NI cDAQ-9178** | 8-slot USB DAQ chassis | — | [User Manual](docs/instruments/NI%20cDAQ-9171_9174_9178%20User%20Manual%20-%20National%20Instruments.pdf) |
+| **NI 9201** | 8-ch analog input module (×5) | ±10V analog inputs | [Getting Started](docs/instruments/ni-9201_getting_started_2-1-2024.pdf) |
+| **Setra Model 264** | Differential pressure transducer | Differential pressure (currently disconnected) | [Data Sheet](docs/instruments/Setra_Model_264_Data_Sheet.pdf) |
+
+### Project-Specific Wiring Documents
+
+| Document | Description |
+|----------|-------------|
+| [MH cDAQ channels MAP and wiring notes 123125.xlsx](docs/instruments/MH%20cDAQ%20channels%20MAP%20and%20wiring%20notes%20123125.xlsx) | cDAQ-9178 channel mapping and wiring notes (updated 12/31/25) |
+| [MH weather station to DAQ connections sketch](docs/instruments/MH_weather_sta_to_DAQ_connections%20sketch.pdf) | Wiring diagram for the outdoor AIO2 weather station serial connection |
+
+Full instrument specifications (ranges, accuracy, channel assignments, serial numbers) are documented in `data_config.json` under the `instruments` key.
 
 ---
 
