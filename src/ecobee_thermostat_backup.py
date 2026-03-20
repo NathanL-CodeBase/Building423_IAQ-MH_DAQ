@@ -47,6 +47,16 @@ Methodology:
     7. Save as dated CSV in a year-based subdirectory on the mission drive
     8. Log result to network backup log file
 
+Note on Current-Day Data:
+    This script always fetches the previous day's data. Unlike the file-based
+    DAQ backup scripts, there is no live-file risk here — data is downloaded
+    from the Ecobee cloud API rather than copied from a local file being written
+    by the DAQ system. The Ecobee Runtime Report API returns complete, finalized
+    interval data for completed days only; intra-day data is not available through
+    this endpoint. Fetching yesterday ensures a full 288-interval dataset. To
+    retrieve a specific past date, use the TARGET_DATE_OVERRIDE environment
+    variable (see below).
+
 Output Files:
     - <dest>/YYYY/YYYY-MM-DD_thermostat.csv: Daily 5-minute interval runtime data
     - <dest>/backup_log_thermostat.txt:       Running backup log on network drive

@@ -12,6 +12,17 @@ The script performs incremental backups by comparing file modification times,
 only copying files that are new or have been updated since the last backup.
 A single consolidated backup log is maintained at the mission network root.
 
+Live-File Safety:
+    Data files for the current calendar day are skipped by default. The DAQ
+    system writes to the current day's file continuously throughout the day,
+    and copying an open/active file can produce a truncated or corrupt backup.
+    Each scheduled run therefore captures only completed files (previous days).
+
+    To include today's partial file (e.g., for manual troubleshooting or to
+    verify recent data is present on the network drive), run with the flag:
+
+        python mh_daq_file_backup.py --include-today
+
 All source and destination paths are loaded from data_config.json (not hardcoded).
 See data_config.template.json for the expected configuration structure.
 
@@ -25,10 +36,12 @@ Institution: NIST
 Last Modified: 2026-01-05
 """
 
+import argparse
 import json
 import logging
 import os
 import shutil
+from datetime import date
 from pathlib import Path
 
 
@@ -185,7 +198,7 @@ def setup_network_logger(name, log_path):
         return None
 
 
-def backup_files(src, dest, network_logger=None):
+def backup_files(src, dest, network_logger=None, skip_today=True):
     """
     Perform incremental backup of files from source to destination directory.
 
@@ -194,10 +207,19 @@ def backup_files(src, dest, network_logger=None):
     new or have been modified (based on modification time) are copied to minimize
     unnecessary transfers.
 
+    By default, files whose name begins with today's date string (YYYYMMDD format)
+    are silently excluded. The DAQ system is actively writing to the current day's
+    file, and copying it mid-write can produce a truncated or corrupt backup copy.
+    Pass skip_today=False (via --include-today on the command line) to override
+    this behavior and include the current day's partial file.
+
     Args:
         src (str): Source directory path to backup from
         dest (str): Destination directory path to backup to
         network_logger (logging.Logger, optional): Logger for network log file
+        skip_today (bool): If True (default), silently skip files whose name
+            starts with today's date (YYYYMMDD). Set False via --include-today
+            to copy the current day's in-progress file.
 
     Returns:
         tuple: (files_copied, files_skipped, errors)
@@ -205,6 +227,8 @@ def backup_files(src, dest, network_logger=None):
     files_copied = 0
     files_skipped = 0
     errors = 0
+
+    today_prefix = date.today().strftime("%Y%m%d") if skip_today else None
 
     def log_message(level, message):
         """Log to both local and network loggers."""
@@ -238,6 +262,10 @@ def backup_files(src, dest, network_logger=None):
 
             # Process each file in current directory
             for file in files:
+                # Skip today's live file — the DAQ system is still writing to it
+                if today_prefix and file.startswith(today_prefix):
+                    continue
+
                 src_file = os.path.join(root, file)
                 dest_file = os.path.join(dest_dir, file)
 
@@ -279,11 +307,30 @@ def main():
     """
     Main execution block for instrument data backup.
 
-    Sets up a single consolidated network logger at the mission base path, then
-    performs sequential backups of both the indoor DAQ and weather station data.
-    Both operations write to the same network log file (backup_log.txt at the
-    mission root, as configured in data_config.json).
+    Parses the --include-today command-line flag, sets up a single consolidated
+    network logger at the mission base path, then performs sequential backups of
+    both the indoor DAQ and weather station data. Both operations write to the
+    same network log file (backup_log.txt at the mission root, as configured in
+    data_config.json).
+
+    By default, today's data files are excluded from backup because the DAQ
+    system is still writing to them. Pass --include-today to override.
     """
+    parser = argparse.ArgumentParser(
+        description="Incremental backup of MH DAQ instrument data to the mission network drive."
+    )
+    parser.add_argument(
+        "--include-today",
+        action="store_true",
+        default=False,
+        help=(
+            "Include today's data files in the backup. By default these are skipped "
+            "because the DAQ system is still writing to them — copying an open file "
+            "can produce a truncated or corrupt backup copy."
+        ),
+    )
+    args = parser.parse_args()
+    skip_today = not args.include_today
 
     # Track overall success across both backup operations
     all_successful = True
@@ -316,7 +363,7 @@ def main():
     local_logger.info("-" * 40)
     network_logger.info("Indoor DAQ backup started.")
 
-    copied, skipped, errs = backup_files(indoor_source, indoor_dest, network_logger)
+    copied, skipped, errs = backup_files(indoor_source, indoor_dest, network_logger, skip_today)
     local_logger.info(
         f"Indoor DAQ complete: {copied} copied, {skipped} unchanged, {errs} errors"
     )
@@ -334,7 +381,7 @@ def main():
     local_logger.info("-" * 40)
     network_logger.info("Weather station backup started.")
 
-    copied, skipped, errs = backup_files(weather_source, weather_dest, network_logger)
+    copied, skipped, errs = backup_files(weather_source, weather_dest, network_logger, skip_today)
     local_logger.info(
         f"Weather station complete: {copied} copied, {skipped} unchanged, {errs} errors"
     )

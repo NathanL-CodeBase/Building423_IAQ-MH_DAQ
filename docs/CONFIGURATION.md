@@ -145,9 +145,25 @@ The `"instruments"` section in `data_config.json` documents which sensors are in
 - **AIO2** — Outdoor weather station (5 channels: wind speed, direction, temperature, humidity, pressure)
 - **Vaisala_HMP155** — Indoor RH/temperature at 4 locations (high-accuracy probes)
 - **Vaisala_HMP45A** — Indoor RH/temperature at 8 locations
+- **Ecobee4** — Smart thermostat (temperature, humidity, HVAC runtime — downloaded via Ecobee API)
 
 **Instruments present in data files but currently disconnected:**
 - **Setra_264** — Differential pressure transducers (channels are logged as zero or noise — disconnected as of 12/31/25)
+
+### Live-File Safety (DAQ Backup Scripts)
+
+`mh_daq_file_backup.py` and `epa_shower_file_backup.py` skip the current day's data file by default. The DAQ system writes to today's file continuously throughout the day, and copying a file that is still being written to can produce a **truncated or corrupt backup copy**.
+
+Each scheduled daily run captures only completed files (previous days). The current day's partial file is left alone and will be backed up at the next scheduled run after midnight, once the DAQ system has finished writing to it.
+
+**To include today's partial file** (e.g., when running manually to verify recent data is visible on the network):
+
+```bat
+python <repo_path>\src\mh_daq_file_backup.py --include-today
+python <repo_path>\src\epa_shower_file_backup.py --include-today
+```
+
+> **Note:** The Ecobee thermostat script (`ecobee_thermostat_backup.py`) is not affected by this — it always fetches the previous day's data from the Ecobee cloud API. The API only provides complete, finalized interval data for finished days, so there is no live-file risk for thermostat data.
 
 ---
 

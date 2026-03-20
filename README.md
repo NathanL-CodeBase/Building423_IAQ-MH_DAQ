@@ -87,11 +87,12 @@ Building423_IAQ-MH_DAQ/
 
 ## Key Features
 
-**Incremental Backups** — Only copies files that have changed (compares modification times)   
-**Ecobee Integration** — Automatic download of 5-minute interval thermostat data via Ecobee API
-**Error Logging** — Detailed logs for troubleshooting and audit trails  
-**Manual & Automated** — Run manually on-demand or schedule with Splinterware System Scheduler  
-**Smart Retry Logic** — Handles token refresh and network timeouts gracefully  
+**Incremental Backups** — Only copies files that have changed (compares modification times)
+**Safe Live-File Handling** — DAQ backup scripts skip today's data file by default (the DAQ system is still writing to it; copying an open file can produce a corrupt backup). Run with `--include-today` to override when needed.
+**Ecobee Integration** — Automatic download of 5-minute interval thermostat data via Ecobee API (always fetches the previous completed day — no live-file risk)
+**Error Logging** — Detailed logs for troubleshooting and audit trails
+**Manual & Automated** — Run manually on-demand or schedule with Splinterware System Scheduler
+**Smart Retry Logic** — Handles token refresh and network timeouts gracefully
 
 ---
 
