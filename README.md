@@ -32,6 +32,12 @@ The system:
 
 Certain commercial equipment, instruments, software, or materials are identified in this repository in order to specify the experimental and analytical procedures adequately. Such identification is not intended to imply recommendation or endorsement of any product or service by NIST, nor is it intended to imply that the materials or equipment identified are necessarily the best available for the purpose.
 
+## Measurement Uncertainty
+
+This repository is responsible for the automated transfer of raw measurement data from the DAQ computer to network storage. No calculations, data processing, or derivation of new quantities are performed by the scripts in this repository. Therefore, measurement uncertainty is limited to the inherent accuracy and precision of the instruments themselves, as specified in their manufacturer documentation.
+
+Detailed specifications for each instrument, including measurement ranges, accuracy, resolution, and calibration information, are available in the instrument documentation: `docs/instruments/INSTRUMENT_DOCUMENTATION.md`.
+
 ---
 
 ## What's in This Repository
@@ -43,6 +49,7 @@ Building423_IAQ-MH_DAQ/
 │   ├── CONFIGURATION.md              # Detailed setup & Ecobee configuration
 │   ├── TROUBLESHOOTING.md            # Common issues and solutions
 │   └── instruments/                  # Instrument manuals, data sheets, and wiring docs
+|      └── INSTRUMENT_DOCUMENTATION.md  # Descriptions and specifications for all active instruments
 ├── src/                               # Python source code (for development)
 │   ├── mh_daq_file_backup.py         # Main DAQ data backup
 │   ├── epa_shower_file_backup.py     # EPA Shower project backup
@@ -53,7 +60,10 @@ Building423_IAQ-MH_DAQ/
 ├── README.md                          # This file
 ├── LICENSE.md                         # Public domain license
 ├── CODEMETA.yaml                     # NIST metadata
-└── CODEOWNERS                        # Repository maintainers
+├── CODEOWNERS                        # Repository maintainers
+├── data_config.template.json          # Configuration template (copy to data_config.json)
+├── fair-software.md                   # FAIR software principles documentation
+└── .gitignore                         # Git ignore file
 ```
 
 ---
@@ -66,7 +76,7 @@ Building423_IAQ-MH_DAQ/
 | **Weather Station Backup** | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
 | **EPA Shower Backup** | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
 | **Ecobee Thermostat Data** | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
-| **Splinterware Scheduler** | **Planned** | Currently running backups manually; will automate with nightly scheduling |
+| **Splinterware Scheduler** | **Under Review** | Software evaluation in progress; backups currently run manually via `run_backup.bat` |
 
 ---
 
