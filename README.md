@@ -9,6 +9,7 @@ Automated backup and data collection scripts for the **NIST IAQ Manufactured Hou
 - **[Installation Guide](docs/INSTALLATION.md)** — Step-by-step instructions for initial setup
 - **[Configuration Guide](docs/CONFIGURATION.md)** — Detailed configuration and Ecobee API setup
 - **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** — Common issues and solutions
+- **[Instrument Documentation](docs/instruments/INSTRUMENT_DOCUMENTATION.md)** — Specifications and variable lists for all active instruments
 - **[License](LICENSE.md)** — Software licensing information
 
 ---
@@ -36,7 +37,7 @@ Certain commercial equipment, instruments, software, or materials are identified
 
 This repository is responsible for the automated transfer of raw measurement data from the DAQ computer to network storage. No calculations, data processing, or derivation of new quantities are performed by the scripts in this repository. Therefore, measurement uncertainty is limited to the inherent accuracy and precision of the instruments themselves, as specified in their manufacturer documentation.
 
-Detailed specifications for each instrument, including measurement ranges, accuracy, resolution, and calibration information, are available in the instrument documentation: `docs/instruments/INSTRUMENT_DOCUMENTATION.md`.
+Detailed specifications for each instrument, including measurement ranges, accuracy, resolution, and calibration information, are available in the instrument documentation: [docs/instruments/INSTRUMENT_DOCUMENTATION.md](docs/instruments/INSTRUMENT_DOCUMENTATION.md).
 
 ---
 
@@ -48,8 +49,9 @@ Building423_IAQ-MH_DAQ/
 │   ├── INSTALLATION.md               # Quick start guide & deployment steps
 │   ├── CONFIGURATION.md              # Detailed setup & Ecobee configuration
 │   ├── TROUBLESHOOTING.md            # Common issues and solutions
-│   └── instruments/                  # Instrument manuals, data sheets, and wiring docs
-|      └── INSTRUMENT_DOCUMENTATION.md  # Descriptions and specifications for all active instruments
+│   └── instruments/                  # Instrument specs and document links (vendor manuals excluded)
+│       ├── INSTRUMENT_DOCUMENTATION.md  # Specifications and variable lists for all active instruments
+│       └── pdf_links.md              # Public download links for vendor manuals (copyright excluded)
 ├── src/                               # Python source code (for development)
 │   ├── mh_daq_file_backup.py         # Main DAQ data backup
 │   ├── epa_shower_file_backup.py     # EPA Shower project backup
@@ -175,7 +177,7 @@ EPA Shower data also copies to:
 
 > The cDAQ-9178 channel map (xlsx) and weather-station wiring sketch (PDF) are NIST-authored internal documents maintained outside the repository. See [docs/instruments/pdf_links.md](docs/instruments/pdf_links.md) for details.
 
-Full instrument specifications (ranges, accuracy, channel assignments, serial numbers) are documented in `data_config.json` under the `instruments` key.
+Detailed specifications, variable names, and channel assignments are in [INSTRUMENT_DOCUMENTATION.md](docs/instruments/INSTRUMENT_DOCUMENTATION.md). Instrument serial numbers are in `data_config.json` under the `instruments` key.
 
 ---
 
