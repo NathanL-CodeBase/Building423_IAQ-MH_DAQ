@@ -36,7 +36,7 @@ Building423_IAQ-MH_DAQ/
 │   ├── INSTALLATION.md               # Quick start guide & deployment steps
 │   ├── CONFIGURATION.md              # Detailed setup & Ecobee configuration
 │   ├── TROUBLESHOOTING.md            # Common issues and solutions
-│   └── instruments/                  # Instrument manuals, data sheets, and wiring docs
+│   └── instruments/                  # Wiring references (vendor manuals excluded — see pdf_links.md)
 ├── src/                               # Python source code (for development)
 │   ├── mh_daq_file_backup.py         # Main DAQ data backup
 │   ├── epa_shower_file_backup.py     # EPA Shower project backup
@@ -141,26 +141,23 @@ EPA Shower data also copies to:
 
 ## Instrumentation
 
-Documentation for all instruments and hardware is in [docs/instruments/](docs/instruments/).
+> Vendor instrument manuals and data sheets are not tracked in this repository due to copyright. Public download links for all vendor documents are in [docs/instruments/pdf_links.md](docs/instruments/pdf_links.md).
 
 ### Active Instruments
 
 | Instrument | Type | Measurement | Documentation |
 |------------|------|-------------|---------------|
-| **Met One AIO 2** | Outdoor weather station (10m MET Tower) | Wind speed/direction, temperature, humidity, barometric pressure | [Manual](docs/instruments/AIO-2-9800-Manual-Rev-G.pdf), [Supplement](docs/instruments/AIO2-1.pdf) |
-| **Vaisala HMP155** | High-accuracy RH/T probe (×4) | Relative humidity, temperature | [User Guide](docs/instruments/Vaisala%20HMP155_User_Guide_in_English.pdf) |
-| **Vaisala HMP45A** | RH/T probe (×8, legacy) | Relative humidity, temperature | [User Guide](docs/instruments/Vaisala%20HMP45AD-User-Guide-U274EN.pdf) |
-| **ecobee4** | Smart Wi-Fi thermostat | Temperature, humidity, HVAC runtime | [Fact Sheet](docs/instruments/FactSheet-ecobee4.pdf) |
-| **NI cDAQ-9178** | 8-slot USB DAQ chassis | — | [User Manual](docs/instruments/NI%20cDAQ-9171_9174_9178%20User%20Manual%20-%20National%20Instruments.pdf) |
-| **NI 9201** | 8-ch analog input module (×5) | ±10V analog inputs | [Getting Started](docs/instruments/ni-9201_getting_started_2-1-2024.pdf) |
-| **Setra Model 264** | Differential pressure transducer | Differential pressure (currently disconnected) | [Data Sheet](docs/instruments/Setra_Model_264_Data_Sheet.pdf) |
+| **Met One AIO 2** | Outdoor weather station (10m MET Tower) | Wind speed/direction, temperature, humidity, barometric pressure | [Manual](https://metone.com/wp-content/uploads/2023/03/AIO-2-9800-Manual-Rev-G.pdf), [Supplement](https://metone.com/wp-content/uploads/2019/10/AIO2-1.pdf) |
+| **Vaisala HMP155** | High-accuracy RH/T probe (×4) | Relative humidity, temperature | [User Guide](https://docs.vaisala.com/r/M210912EN-J/en-US) |
+| **Vaisala HMP45A** | RH/T probe (×8, legacy) | Relative humidity, temperature | [User Guide](https://www.vaisala.com/sites/default/files/documents/HMP45AD-User-Guide-U274EN.pdf) |
+| **ecobee4** | Smart Wi-Fi thermostat | Temperature, humidity, HVAC runtime | [Fact Sheet](https://www.firstenergycorp.com/content/dam/customer/products/files/FactSheet-ecobee4.pdf) |
+| **NI cDAQ-9178** | 8-slot USB DAQ chassis | — | [User Manual](https://www.ni.com/docs/en-US/bundle/cdaq-9171-9174-9178-features/resource/372838e.pdf) |
+| **NI 9201** | 8-ch analog input module (×5) | ±10V analog inputs | [Getting Started](https://download.ni.com/support/manuals/373783h.pdf) |
+| **Setra Model 264** | Differential pressure transducer | Differential pressure (currently disconnected) | [Data Sheet](https://www.setra.com/hubfs/Product_Data_Sheets/Setra_Model_264_Data_Sheet.pdf) |
 
 ### Project-Specific Wiring Documents
 
-| Document | Description |
-|----------|-------------|
-| [MH cDAQ channels MAP and wiring notes 123125.xlsx](docs/instruments/MH%20cDAQ%20channels%20MAP%20and%20wiring%20notes%20123125.xlsx) | cDAQ-9178 channel mapping and wiring notes (updated 12/31/25) |
-| [MH weather station to DAQ connections sketch](docs/instruments/MH_weather_sta_to_DAQ_connections%20sketch.pdf) | Wiring diagram for the outdoor AIO2 weather station serial connection |
+> The cDAQ-9178 channel map (xlsx) and weather-station wiring sketch (PDF) are NIST-authored internal documents maintained outside the repository. See [docs/instruments/pdf_links.md](docs/instruments/pdf_links.md) for details.
 
 Full instrument specifications (ranges, accuracy, channel assignments, serial numbers) are documented in `data_config.json` under the `instruments` key.
 

@@ -226,3 +226,7 @@ $RECYCLE.BIN/
 *.tmp
 ~$*.xlsx
 ~$*.docx
+
+# Instrument documents (vendor copyright + internal wiring docs — not committed)
+docs/instruments/*.pdf
+docs/instruments/*.xlsx
