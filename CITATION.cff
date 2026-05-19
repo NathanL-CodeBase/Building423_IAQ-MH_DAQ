@@ -10,8 +10,6 @@ authors:
     affiliation: "National Institute of Standards and Technology"
     email: nathan.lima@nist.gov
     orcid: "https://orcid.org/0009-0004-6252-4368"
-institution:
-  name: "National Institute of Standards and Technology"
 license: NIST-PD
 repository-code: "https://github.com/usnistgov/Building423_IAQ-MH_DAQ"
 doi: 10.18434/mds2-4154

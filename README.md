@@ -179,17 +179,6 @@ EPA Shower data also copies to:
 
 Detailed specifications, variable names, and channel assignments are in [INSTRUMENT_DOCUMENTATION.md](docs/instruments/INSTRUMENT_DOCUMENTATION.md). Instrument serial numbers are in `data_config.json` under the `instruments` key.
 
----
-
-## Contact & Support
-
-**Maintained by:**  
-Nathan Lima, NIST  
-Email: [nathan.lima@nist.gov]
-
-**Related NIST Resources:**
-- [Buildings and Construction](https://www.nist.gov/buildings-construction)
-- [Energy and Environment Division](https://www.nist.gov/el)
 
 ---
 
@@ -214,6 +203,16 @@ If you use this software in your research, please cite as:
   doi       = {10.18434/mds2-4154}
 }
 ```
+---
+
+## Contact
+
+- **PI:** [Dr. Nathan Lima](https://www.nist.gov/people/dr-nathan-lima)
+- **NIST Organizational Unit:** [Engineering Laboratory](https://www.nist.gov/el)
+- **Division:** [Building Energy and Environment Division](https://www.nist.gov/el/beed)
+- **Group:** [Indoor Air Quality and Ventilation Group](https://www.nist.gov/el/beed/indoor-air-quality-ventilation)
+- **Email:** nathan.lima@nist.gov
+
 
 <!-- References -->
 
