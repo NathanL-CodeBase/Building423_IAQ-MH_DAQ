@@ -204,7 +204,7 @@ This software is in the public domain and provided "as is" according to the [LIC
 If you use this software in your research, please cite as:
 
 ```
-Lima, Nathan M. (2026). Building 423 IAQ Manufactured House DAQ — Automated Data Acquisition and Backup System (Version 1.0) [Source code]. National Institute of Standards and Technology. https://github.com/usnistgov/Building423_IAQ-MH_DAQ
+Lima, Nathan M. (2026). Building 423 IAQ Manufactured House DAQ — Automated Data Acquisition and Backup System (Version 1.0) [Source code]. National Institute of Standards and Technology. https://github.com/usnistgov/Building423_IAQ-MH_DAQ https://doi.org/10.18434/mds2-4154
 ```
 
 <!-- References -->
