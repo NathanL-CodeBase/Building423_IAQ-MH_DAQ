@@ -199,7 +199,7 @@ This software is in the public domain and provided "as is" according to the [LIC
 
 ---
 
-## How to Cite
+## Citation
 
 If you use this software in your research, please cite as:
 
