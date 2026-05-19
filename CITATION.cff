@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+type: software
+title: "Building 423 IAQ Manufactured House DAQ — Automated Data Acquisition and Backup System"
+version: "1.0"
+date-released: "2026-05-01"
+authors:
+  - family-names: Lima
+    given-names: Nathan M.
+    affiliation: "National Institute of Standards and Technology"
+    email: nathan.lima@nist.gov
+    orcid: "https://orcid.org/0009-0004-6252-4368"
+institution:
+  name: "National Institute of Standards and Technology"
+license: NIST-PD
+repository-code: "https://github.com/usnistgov/Building423_IAQ-MH_DAQ"
+doi: 10.18434/mds2-4154
+abstract: >
+  Automated backup and data collection scripts for the NIST IAQ Manufactured
+  House (MH) test facility Data Acquisition (DAQ) system at Building 423.
+  Provides incremental file backup from the DAQ desktop computer to network
+  storage and automated download of thermostat runtime data via the Ecobee API.
+keywords:
+  - indoor air quality
+  - data acquisition
+  - building science
+  - NIST
+  - manufactured housing
+  - thermostat
+  - ecobee
