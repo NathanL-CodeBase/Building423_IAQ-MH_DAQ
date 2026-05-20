@@ -12,7 +12,7 @@ authors:
     orcid: "https://orcid.org/0009-0004-6252-4368"
 license: NIST-PD
 repository-code: "https://github.com/usnistgov/Building423_IAQ-MH_DAQ"
-doi: 10.18434/mds2-4154
+doi: "10.18434/mds2-4154"
 abstract: >
   Automated backup and data collection scripts for the NIST IAQ Manufactured
   House (MH) test facility Data Acquisition (DAQ) system at Building 423.
