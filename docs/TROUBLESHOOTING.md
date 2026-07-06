@@ -51,6 +51,8 @@ This guide provides solutions for common issues encountered when running the MH 
 
 ### Ecobee Token Issues
 
+> **Current status:** The Ecobee backup is not yet operational on the Building 423 DAQ computer — no Ecobee API key has been obtained. Until one is, `ecobee_thermostat_backup.py` will log a token/authorization error on every run. This is expected and does not affect the DAQ or EPA Shower backups. The solutions below apply once an API key and token are in place. See [Configuration Guide → Ecobee Thermostat Setup](CONFIGURATION.md#ecobee-thermostat-setup).
+
 #### Error: "Token file not found"
 
 **Cause:** The Ecobee token setup has never been run, or the token file is missing.
@@ -342,7 +344,7 @@ This guide provides solutions for common issues encountered when running the MH 
 
 ### Splinterware Scheduler Issues
 
-#### Problem: Scheduled task doesn't run at the expected time
+#### Problem: Scheduled event doesn't run at the expected time
 
 **Cause:** Scheduler configuration is incorrect, or the computer was powered off at the scheduled time.
 
@@ -354,38 +356,38 @@ This guide provides solutions for common issues encountered when running the MH 
 
 2. **Verify the schedule in Splinterware:**
    - Open **Splinterware System Scheduler**
-   - Right-click the **MH IAQ DAQ Backup** task
-   - Select **Properties** or **Edit**
-   - Confirm the time is set correctly
+   - Right-click the **MH IAQ DAQ Backup** event in the event list
+   - Select **Edit** (or **Properties**)
+   - On the **Schedule** tab, confirm the time is set correctly
 
-3. **Test the task manually:**
-   - Right-click the task
-   - Select **Run Now**
+3. **Test the event manually:**
+   - Right-click the event
+   - Select **Run** (or **Run Now**)
    - Check `batch_output.log` to verify it ran
 
-4. **Check if the task is enabled:**
-   - The task should have a **checkmark** next to it in Splinterware
-   - If not, right-click and select **Enable**
+4. **Check if the event is enabled:**
+   - The event should be marked as enabled/active in the event list
+   - If it is disabled, right-click and select **Enable**
 
 ---
 
-#### Problem: Scheduled task runs but doesn't complete (hangs or takes too long)
+#### Problem: Scheduled event runs but doesn't complete (hangs or takes too long)
 
 **Cause:** The backup is taking longer than expected, or there's a blocking network issue.
 
 **Solution:**
 
-1. Monitor the log file while the task runs:
+1. Monitor the log file while the event runs:
    - Open `<repo_path>\scripts\batch_output.log` in a text editor
    - Keep the window open and refresh periodically (F5)
    - Look for messages that indicate where it's stuck
 
-2. Increase the timeout in Splinterware:
+2. Adjust the run-time limit in Splinterware:
    - Open **Splinterware System Scheduler**
-   - Right-click the task → **Properties**
-   - Look for **Stop if still running after X minutes**
-   - Increase the timeout (e.g., 30 to 60 minutes)
-   - Save the task
+   - Right-click the event → **Edit** (or **Properties**)
+   - On the **Advanced** tab, look for an option that stops the event if it runs longer than a set time
+   - Increase the limit (e.g., 30 to 60 minutes) if the backup is being cut short
+   - Click **OK** to save
 
 3. If specific backups are failing:
    - Run each script manually to identify the problem:

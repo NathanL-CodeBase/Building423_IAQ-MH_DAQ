@@ -152,6 +152,8 @@ Now run the backup manually to make sure everything works. Choose one of the two
    - `ALL EPA SHOWER BACKUPS COMPLETED SUCCESSFULLY` (from `epa_shower_file_backup.py`)
    - `ECOBEE BACKUP COMPLETED SUCCESSFULLY` (from `ecobee_thermostat_backup.py`)
 
+   > **Note:** Until an Ecobee API key is obtained, the Ecobee script will not complete successfully — it will log a token/authorization error instead of the success message. This is expected and does not affect the DAQ or EPA Shower backups.
+
 4. **Check for errors:**
    - Look for lines containing `ERROR` or `NOT accessible`
    - If errors appear, see the [Troubleshooting Guide](TROUBLESHOOTING.md)
@@ -169,10 +171,10 @@ Run the batch file manually every few days:
 - Run: `<repo_path>\scripts\run_backup.bat`
 - Check `<repo_path>\scripts\batch_output.log` for success
 
-### Option B: Automatic Nightly Backups (Planned)
+### Option B: Automatic Nightly Backups (Splinterware Scheduler)
 
-Schedule the backup to run automatically every night using Splinterware System Scheduler:
-- See the [Configuration Guide](CONFIGURATION.md) for detailed scheduler setup instructions
+Schedule the backup to run automatically every night using Splinterware System Scheduler. On the Building 423 DAQ computer this is done by creating an **event** (via **Action → New Event...** or the green **+** button) that runs `run_backup.bat`:
+- See the [Configuration Guide](CONFIGURATION.md) for detailed event setup instructions
 - This is the **long-term approach** for unattended operation
 
 ---
@@ -189,7 +191,7 @@ Before considering deployment complete, confirm:
 - Log file shows no errors
 - DAQ data appeared on mission network drive
 - EPA Shower data appeared on elwood network drive (if used)
-- Ecobee token file created and first thermostat backup succeeded
+- Ecobee token file created and first thermostat backup succeeded *(pending an Ecobee API key — not required for current deployment; the Ecobee script will log an authorization error until a key is obtained)*
 
 ---
 

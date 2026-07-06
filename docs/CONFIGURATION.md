@@ -169,6 +169,8 @@ python <repo_path>\src\epa_shower_file_backup.py --include-today
 
 ## Ecobee Thermostat Setup
 
+> **Current status (Building 423 deployment):** The Ecobee thermostat backup is **not yet operational.** An Ecobee API key has not been obtained for this account, so `ecobee_thermostat_backup.py` cannot authenticate and will log a token/authorization error when `run_backup.bat` runs. This does not affect the DAQ or weather-station backups, which run normally. The instructions below are retained so the integration can be enabled once an API key is available.
+
 The Ecobee integration automatically downloads 5-minute interval thermostat runtime data each day and saves it as a CSV file on the mission network drive.
 
 ### Overview
@@ -247,7 +249,7 @@ Each CSV contains 288 rows of 5-minute interval data per day.
 
 ## Splinterware System Scheduler
 
-To run backups automatically every night, use **Splinterware System Scheduler** (required due to PIV smart card login on the DAQ computer).
+To run backups automatically every night, use **Splinterware System Scheduler** (required due to PIV smart card login on the DAQ computer). An event is already configured on the Building 423 DAQ computer; the steps below document how it was set up and how to edit it.
 
 ### Why Splinterware?
 
@@ -257,15 +259,20 @@ The DAQ computer requires **PIV smart card login**, which prevents standard Wind
 
 1. On the **DAQ computer**, open **Splinterware System Scheduler**
 
-2. Click **Add Task** (or the **`+`** button)
+2. Create a new event using either method:
+   - From the top menu, click **Action** → **New Event...**, **or**
+   - Click the green circle with the white **`+`** sign
 
-3. Configure the task with these settings:
+   This opens the **Event** screen on the **Event** tab.
 
-   **General Tab:**
-   - **Task type:** `Run a Program / Script`
-   - **Program / Script:** `<repo_path>\scripts\run_backup.bat`
-   - **Start in (working directory):** `<repo_path>\scripts`
-   - **Description:** `MH IAQ DAQ Backup`
+3. On the **Event** tab, configure these fields:
+   - **Event Type:** `Run Application`
+   - **Title:** `MH IAQ DAQ Backup`
+   - **Application:** `<repo_path>\scripts\run_backup.bat`
+   - **Parameters:** *(leave blank)*
+   - **Working Dir:** `<repo_path>\scripts`
+   - **Sendkeys:** *(leave blank)*
+   - **State:** leave at the default (normal window)
 
 4. Click the **Schedule** tab
 
@@ -274,24 +281,22 @@ The DAQ computer requires **PIV smart card login**, which prevents standard Wind
    - **Time:** Choose a time when the DAQ computer is reliably powered on and no active experiments are running
    - **Recommended:** `6:00 AM`
 
-6. Optional additional options:
-   - **Retry on failure:** Enable with reasonable intervals
-   - **Stop if still running:** Set a timeout (e.g., 30 minutes)
+6. (Optional) Click the **Advanced** tab to review additional options, such as retry-on-failure and a limit on how long the event may run. Configure these only if needed; the defaults are fine for a nightly backup.
 
-7. Click **Save** and enable the task
+7. Click **OK** (or **Save**) to create the event. Confirm it appears in the main event list.
 
-### Verifying the Scheduled Task
+### Verifying the Scheduled Event
 
-1. **Manual test:** Right-click the task → **Run Now** to verify it works before relying on the schedule
+1. **Manual test:** Right-click the **MH IAQ DAQ Backup** event → **Run** (or **Run Now**) to verify it works before relying on the schedule
 2. **First scheduled run:** Check `batch_output.log` at the scheduled time to confirm it ran automatically
 3. **Ongoing monitoring:** Check `batch_output.log` after each scheduled run to ensure no errors
 
-### Editing or Disabling the Task
+### Editing or Disabling the Event
 
 1. Open **Splinterware System Scheduler**
-2. Find the **MH IAQ DAQ Backup** task
-3. Right-click → **Edit** or **Properties**
-4. Make your changes and click **Save**
+2. Find the **MH IAQ DAQ Backup** event in the event list
+3. Right-click → **Edit** (or **Properties**) to reopen the Event/Schedule/Advanced tabs
+4. Make your changes and click **OK** to save
 
 ---
 
@@ -302,11 +307,11 @@ The DAQ computer requires **PIV smart card login**, which prevents standard Wind
 Before considering the system fully configured, verify:
 
 - [ ] Network drives are accessible (see [Installation Guide](INSTALLATION.md))
-- [ ] Manual backup test succeeds (`run_backup.bat` runs without errors)
+- [ ] Manual backup test succeeds (`run_backup.bat` runs — DAQ and weather-station backups complete without errors)
 - [ ] DAQ data appears on mission network drive (`indoor_daq\` and `weather_station\` folders)
 - [ ] EPA Shower data appears on elwood network drive (if configured)
-- [ ] Ecobee token is created and first backup succeeds
-- [ ] Splinterware scheduler task is configured and runs automatically
+- [ ] Ecobee token is created and first backup succeeds *(pending an Ecobee API key — not required for current deployment)*
+- [ ] Splinterware scheduler event is configured and runs automatically
 
 ### Manual Testing
 

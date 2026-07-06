@@ -23,7 +23,7 @@ The system:
 1. **Backs up indoor DAQ data** from the Task Logger to the mission network drive (all data)
 2. **Backs up outdoor weather station data** (AIO2) to the mission network drive (all data)  
 3. **Backs up selected 2026 data** to the EPA Shower project share (temporary — will be deprecated)
-4. **Downloads thermostat data** from the Ecobee4 thermostat via the Ecobee API (daily 5-minute interval runtime data)
+4. **Downloads thermostat data** from the Ecobee4 thermostat via the Ecobee API (daily 5-minute interval runtime data) — *not yet operational; pending an Ecobee API key (see [System Status](#system-status-and-deployment-timeline))*
 
 **Note:** All three backup scripts reference the same configuration file (`data_config.json`). The EPA Shower backup is a separate project-specific target that will be removed after the EPA project concludes.
 
@@ -77,8 +77,8 @@ Building423_IAQ-MH_DAQ/
 | **DAQ Backup** (Task Logger) | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
 | **Weather Station Backup** | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
 | **EPA Shower Backup** | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
-| **Ecobee Thermostat Data** | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
-| **Splinterware Scheduler** | **Under Review** | Software evaluation in progress; backups currently run manually via `run_backup.bat` |
+| **Ecobee Thermostat Data** | **Not operational** | Pending an Ecobee API key; script is deployed but logs an authorization error until a key is obtained |
+| **Splinterware Scheduler** | **Deployed** | Scheduled event configured on the Building 423 DAQ computer; runs `run_backup.bat` nightly |
 
 ---
 
@@ -108,9 +108,9 @@ Building423_IAQ-MH_DAQ/
 
 **Incremental Backups** — Only copies files that have changed (compares modification times)
 **Safe Live-File Handling** — DAQ backup scripts skip today's data file by default (the DAQ system is still writing to it; copying an open file can produce a corrupt backup). Run with `--include-today` to override when needed.
-**Ecobee Integration** — Automatic download of 5-minute interval thermostat data via Ecobee API (always fetches the previous completed day — no live-file risk)
+**Ecobee Integration** — Automatic download of 5-minute interval thermostat data via Ecobee API (always fetches the previous completed day — no live-file risk). *Not yet enabled — pending an Ecobee API key.*
 **Error Logging** — Detailed logs for troubleshooting and audit trails
-**Manual & Automated** — Run manually on-demand or schedule with Splinterware System Scheduler
+**Manual & Automated** — Run manually on-demand, or automatically each night via the configured Splinterware System Scheduler event
 **Smart Retry Logic** — Handles token refresh and network timeouts gracefully
 
 ---
