@@ -16,10 +16,8 @@ Before you begin, confirm that:
 - The machine is on the **NIST network**
 - You can reach the **mission network drive**
   > Test this by opening **File Explorer** and typing the mission path (from `data_config.json` → `remote_destinations.mission.base_path`) in the address bar. You should see folders. There should also be a shortcut on the desktop, as using it may resolve issues with accessing the drive through File Explorer.
-- You can reach the **elwood network drive**
-  > Test this by opening **File Explorer** and typing the elwood path (from `data_config.json` → `remote_destinations.epa_shower.base_path`) in the address bar. You should see folders.
 
-If either network drive is not accessible, **stop** and contact eldst on slack before proceeding.
+If the mission network drive is not accessible, **stop** and contact eldst on slack before proceeding.
 
 ---
 
@@ -149,10 +147,9 @@ Now run the backup manually to make sure everything works. Choose one of the two
 2. Open the file **`batch_output.log`** in **Notepad**
 3. Look for these messages (one for each backup):
    - `ALL BACKUPS COMPLETED SUCCESSFULLY` (from `mh_daq_file_backup.py`)
-   - `ALL EPA SHOWER BACKUPS COMPLETED SUCCESSFULLY` (from `epa_shower_file_backup.py`)
    - `ECOBEE BACKUP COMPLETED SUCCESSFULLY` (from `ecobee_thermostat_backup.py`)
 
-   > **Note:** Until an Ecobee API key is obtained, the Ecobee script will not complete successfully — it will log a token/authorization error instead of the success message. This is expected and does not affect the DAQ or EPA Shower backups.
+   > **Note:** Until an Ecobee API key is obtained, the Ecobee script will not complete successfully — it will log a token/authorization error instead of the success message. This is expected and does not affect the DAQ backup.
 
 4. **Check for errors:**
    - Look for lines containing `ERROR` or `NOT accessible`
@@ -190,7 +187,6 @@ Before considering deployment complete, confirm:
 - Manual backup test completed successfully
 - Log file shows no errors
 - DAQ data appeared on mission network drive
-- EPA Shower data appeared on elwood network drive (if used)
 - Ecobee token file created and first thermostat backup succeeded *(pending an Ecobee API key — not required for current deployment; the Ecobee script will log an authorization error until a key is obtained)*
 
 ---

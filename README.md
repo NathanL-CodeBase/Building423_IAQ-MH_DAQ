@@ -22,10 +22,9 @@ The system:
 
 1. **Backs up indoor DAQ data** from the Task Logger to the mission network drive (all data)
 2. **Backs up outdoor weather station data** (AIO2) to the mission network drive (all data)  
-3. **Backs up selected 2026 data** to the EPA Shower project share (temporary — will be deprecated)
-4. **Downloads thermostat data** from the Ecobee4 thermostat via the Ecobee API (daily 5-minute interval runtime data) — *not yet operational; pending an Ecobee API key (see [System Status](#system-status-and-deployment-timeline))*
+3. **Downloads thermostat data** from the Ecobee4 thermostat via the Ecobee API (daily 5-minute interval runtime data) — *not yet operational; pending an Ecobee API key (see [System Status](#system-status-and-deployment-timeline))*
 
-**Note:** All three backup scripts reference the same configuration file (`data_config.json`). The EPA Shower backup is a separate project-specific target that will be removed after the EPA project concludes.
+**Note:** The active backup scripts reference the same configuration file (`data_config.json`). The EPA Shower measurement campaign ended 2026-07-16; its backup script has been retired from the nightly sequence and moved to `src/completed_campaigns/` (see [What's in This Repository](#whats-in-this-repository)).
 
 ---
 
@@ -54,9 +53,10 @@ Building423_IAQ-MH_DAQ/
 │       └── pdf_links.md              # Public download links for vendor manuals (copyright excluded)
 ├── src/                               # Python source code (for development)
 │   ├── mh_daq_file_backup.py         # Main DAQ data backup
-│   ├── epa_shower_file_backup.py     # EPA Shower project backup
 │   ├── ecobee_thermostat_backup.py   # Ecobee thermostat data download
-│   └── ecobee_token_setup.py         # Ecobee API setup (one-time)
+│   ├── ecobee_token_setup.py         # Ecobee API setup (one-time)
+│   └── completed_campaigns/          # Retired scripts from concluded campaigns
+│       └── epa_shower_file_backup.py # EPA Shower backup (campaign ended 2026-07-16)
 ├── scripts/                           # Deployment scripts
 │   └── run_backup.bat                # Batch file to run all backups in sequence
 ├── README.md                          # This file
@@ -76,7 +76,7 @@ Building423_IAQ-MH_DAQ/
 |-----------|--------|-------|
 | **DAQ Backup** (Task Logger) | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
 | **Weather Station Backup** | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
-| **EPA Shower Backup** | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
+| **EPA Shower Backup** | **Retired** | Campaign ended 2026-07-16; script moved to `src/completed_campaigns/` and removed from `run_backup.bat` |
 | **Ecobee Thermostat Data** | **Not operational** | Pending an Ecobee API key; script is deployed but logs an authorization error until a key is obtained |
 | **Splinterware Scheduler** | **Deployed** | Scheduled event configured on the Building 423 DAQ computer; runs `run_backup.bat` nightly |
 
@@ -121,7 +121,6 @@ Building423_IAQ-MH_DAQ/
 - **Machine:** DAQ desktop computer (Building 423)
 - **Network access:** NIST mission network
 - **Storage:** Access to the mission network drive (path configured in `data_config.json` → `remote_destinations.mission.base_path`)
-- **Additional access:** Elwood network drive (path configured in `data_config.json` → `remote_destinations.epa_shower.base_path`, for EPA Shower backup)
 
 ### Software
 - **Python 3.x** (installed via Miniforge/Conda — run `conda info --base` to find your install path)
@@ -146,13 +145,6 @@ All backed-up data is organized by source and date:
     └── thermostat\          ← Ecobee4 runtime CSVs
         └── YYYY\
             └── YYYY-MM-DD_thermostat.csv
-```
-
-EPA Shower data also copies to:
-```
-<remote_destinations.epa_shower.base_path>\     ← configured in data_config.json
-    ├── indoor_daq\2026\
-    └── weather_station\2026\
 ```
 
 ---

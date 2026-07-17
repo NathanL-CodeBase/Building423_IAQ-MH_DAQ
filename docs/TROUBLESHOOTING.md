@@ -24,7 +24,7 @@ This guide provides solutions for common issues encountered when running the MH 
 
 #### Error: "Network path NOT accessible" OR "Network path does not exist"
 
-**Cause:** The DAQ computer cannot reach the mission or elwood network drives.
+**Cause:** The DAQ computer cannot reach the mission network drive.
 
 **Solutions:**
 
@@ -51,7 +51,7 @@ This guide provides solutions for common issues encountered when running the MH 
 
 ### Ecobee Token Issues
 
-> **Current status:** The Ecobee backup is not yet operational on the Building 423 DAQ computer — no Ecobee API key has been obtained. Until one is, `ecobee_thermostat_backup.py` will log a token/authorization error on every run. This is expected and does not affect the DAQ or EPA Shower backups. The solutions below apply once an API key and token are in place. See [Configuration Guide → Ecobee Thermostat Setup](CONFIGURATION.md#ecobee-thermostat-setup).
+> **Current status:** The Ecobee backup is not yet operational on the Building 423 DAQ computer — no Ecobee API key has been obtained. Until one is, `ecobee_thermostat_backup.py` will log a token/authorization error on every run. This is expected and does not affect the DAQ backup. The solutions below apply once an API key and token are in place. See [Configuration Guide → Ecobee Thermostat Setup](CONFIGURATION.md#ecobee-thermostat-setup).
 
 #### Error: "Token file not found"
 
@@ -132,7 +132,7 @@ This guide provides solutions for common issues encountered when running the MH 
 
 **Cause:** The DAQ computer lost internet connectivity while fetching Ecobee data, or the Ecobee API servers are slow.
 
-**What happens:** The Ecobee script will timeout gracefully after ~90 seconds (30s for token refresh + 60s for report fetch). The other backup scripts (DAQ and EPA Shower) are **unaffected** and continue normally.
+**What happens:** The Ecobee script will timeout gracefully after ~90 seconds (30s for token refresh + 60s for report fetch). The DAQ backup script is **unaffected** and continues normally.
 
 **Solution:**
 
@@ -394,7 +394,6 @@ This guide provides solutions for common issues encountered when running the MH 
      ```
      cd <repo_path>\src
      python mh_daq_file_backup.py
-     python epa_shower_file_backup.py
      python ecobee_thermostat_backup.py
      ```
    - Running scripts directly prints output to the console, making errors easier to spot

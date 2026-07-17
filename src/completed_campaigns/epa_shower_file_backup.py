@@ -11,9 +11,14 @@ It backs up two types of data:
     2. Outdoor weather station data (Met One AIO2 serial logger)
 
 Unlike mh_daq_file_backup.py (which copies all data to the mission drive),
-this script copies only the archive year specified in data_config.json. It is
-a temporary supplement created for the 2026 EPA Shower project and will be
-removed once that project concludes.
+this script copies only the archive year specified in data_config.json.
+
+Campaign status:
+    The EPA Shower measurement campaign ended 2026-07-16. This script was
+    retired from the nightly run_backup.bat sequence on 2026-07-17 and moved to
+    src/completed_campaigns/. It is retained for reference and can still be run
+    manually for a one-off re-copy while the epa_shower block remains in
+    data_config.json.
 
 The script performs incremental backups by comparing file modification times,
 only copying files that are new or have been updated since the last backup.
@@ -73,7 +78,8 @@ def load_config(config_file="data_config.json"):
     search_paths = [
         Path(config_file),  # Current directory
         Path(__file__).parent / config_file,  # Script directory
-        Path(__file__).parent.parent / config_file,  # Parent of script directory
+        Path(__file__).parent.parent / config_file,  # src/
+        Path(__file__).parent.parent.parent / config_file,  # Repo root
     ]
 
     for config_path in search_paths:

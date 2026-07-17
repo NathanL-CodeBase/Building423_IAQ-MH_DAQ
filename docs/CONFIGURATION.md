@@ -67,7 +67,13 @@ Find the `"remote_destinations"` section. Configure one or more of the following
 - `YOUR_SERVER` → Your actual server name (e.g., `mission.el.nist.gov`)
 - `YOUR_SHARE` and path structure → Match your network drive's actual path
 
-#### **EPA Shower Network (Temporary — Optional)**
+#### **EPA Shower Network (Retired — campaign ended 2026-07-16)**
+
+The EPA Shower measurement campaign has concluded. Its backup script now lives
+in `src/completed_campaigns/` and is no longer part of the nightly
+`run_backup.bat` sequence. The `epa_shower` block is kept in `data_config.json`
+only so the retired script can still be run manually for a one-off re-copy;
+new deployments do not need it.
 
 ```json
 "epa_shower": {
@@ -79,10 +85,6 @@ Find the `"remote_destinations"` section. Configure one or more of the following
   "archive_year": 2026
 }
 ```
-
-**Change:**
-- `YOUR_SERVER` and `YOUR_SHARE` → Your actual network location
-- `archive_year` → The year of data to back up (currently `2026`)
 
 #### **Thermostat (Ecobee)**
 
@@ -112,13 +114,13 @@ Find the `"remote_destinations"` section. Configure one or more of the following
 
 All backup scripts use the same configuration file with these data flows:
 
-| Script | Data Source | Mission Destination | EPA Shower Destination |
-|--------|-------------|---------------------|----------------------|
-| `mh_daq_file_backup.py` | `local_sources.indoor_daq.path` | `remote_destinations.mission.base_path\indoor_daq\` | Not backed up |
-| `mh_daq_file_backup.py` | `local_sources.outdoor_weather.path` | `remote_destinations.mission.base_path\weather_station\` | Not backed up |
-| `epa_shower_file_backup.py` | `local_sources.indoor_daq.path\<archive_year>` | Not backed up | `remote_destinations.epa_shower.base_path\indoor_daq\<archive_year>\` |
-| `epa_shower_file_backup.py` | `local_sources.outdoor_weather.path\<archive_year>` | Not backed up | `remote_destinations.epa_shower.base_path\weather_station\<archive_year>\` |
-| `ecobee_thermostat_backup.py` | Ecobee API (internet) | `remote_destinations.thermostat.base_path\YYYY\` | Not backed up |
+| Script | Data Source | Mission Destination |
+|--------|-------------|---------------------|
+| `mh_daq_file_backup.py` | `local_sources.indoor_daq.path` | `remote_destinations.mission.base_path\indoor_daq\` |
+| `mh_daq_file_backup.py` | `local_sources.outdoor_weather.path` | `remote_destinations.mission.base_path\weather_station\` |
+| `ecobee_thermostat_backup.py` | Ecobee API (internet) | `remote_destinations.thermostat.base_path\YYYY\` |
+
+The retired `src/completed_campaigns/epa_shower_file_backup.py` (EPA Shower campaign, ended 2026-07-16) copied the archive year of indoor DAQ and weather station data to `remote_destinations.epa_shower.base_path`. It is no longer run nightly.
 
 All source and destination paths are configured in `data_config.json`.
 
@@ -152,7 +154,7 @@ The `"instruments"` section in `data_config.json` documents which sensors are in
 
 ### Live-File Safety (DAQ Backup Scripts)
 
-`mh_daq_file_backup.py` and `epa_shower_file_backup.py` skip the current day's data file by default. The DAQ system writes to today's file continuously throughout the day, and copying a file that is still being written to can produce a **truncated or corrupt backup copy**.
+`mh_daq_file_backup.py` skips the current day's data file by default. The DAQ system writes to today's file continuously throughout the day, and copying a file that is still being written to can produce a **truncated or corrupt backup copy**.
 
 Each scheduled daily run captures only completed files (previous days). The current day's partial file is left alone and will be backed up at the next scheduled run after midnight, once the DAQ system has finished writing to it.
 
@@ -160,7 +162,6 @@ Each scheduled daily run captures only completed files (previous days). The curr
 
 ```bat
 python <repo_path>\src\mh_daq_file_backup.py --include-today
-python <repo_path>\src\epa_shower_file_backup.py --include-today
 ```
 
 > **Note:** The Ecobee thermostat script (`ecobee_thermostat_backup.py`) is not affected by this — it always fetches the previous day's data from the Ecobee cloud API. The API only provides complete, finalized interval data for finished days, so there is no live-file risk for thermostat data.
@@ -309,7 +310,6 @@ Before considering the system fully configured, verify:
 - [ ] Network drives are accessible (see [Installation Guide](INSTALLATION.md))
 - [ ] Manual backup test succeeds (`run_backup.bat` runs — DAQ and weather-station backups complete without errors)
 - [ ] DAQ data appears on mission network drive (`indoor_daq\` and `weather_station\` folders)
-- [ ] EPA Shower data appears on elwood network drive (if configured)
 - [ ] Ecobee token is created and first backup succeeds *(pending an Ecobee API key — not required for current deployment)*
 - [ ] Splinterware scheduler event is configured and runs automatically
 
