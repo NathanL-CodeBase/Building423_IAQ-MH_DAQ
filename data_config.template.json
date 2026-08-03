@@ -48,6 +48,17 @@
       "notes": "Temporary backup for EPA Shower project — remove this section when project concludes"
     },
 
+    "wui_smoke": {
+      "description": "NIST WUI Smoke IAQ Mitigation project backup - deployment date onward",
+      "base_path": "\\\\elwood.nist.gov\\732\\internal\\IAQ\\MH_Contamination_Fall_2026\\instruments",
+      "folders": {
+        "indoor_daq": "MH_DAQ_indoor",
+        "weather_station": "MH_DAQ_weather"
+      },
+      "start_date": "2026-07-31",
+      "notes": "Active campaign. start_date bounds the copy by the file's YYYYMMDD name prefix (first burn 2026-07-31); no end date set. Pre-deployment files are moved manually. Feeds the NIST_wui-smoke-iaq-mitigation repo."
+    },
+
     "thermostat": {
       "description": "Ecobee thermostat data backup - daily 5-minute interval CSVs",
       "base_path": "\\\\YOUR_SERVER\\YOUR_SHARE\\...\\thermostat",

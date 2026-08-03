@@ -86,6 +86,31 @@ new deployments do not need it.
 }
 ```
 
+#### **WUI Smoke Network (Active)**
+
+The NIST WUI Smoke IAQ Mitigation campaign is active (first burn 2026-07-31, no
+set end date). Its backup script (`src/wui_smoke_file_backup.py`) runs nightly
+in `run_backup.bat` and copies indoor DAQ and weather station data to the Elwood
+share. Only files whose leading `YYYYMMDD` name prefix is on or after
+`start_date` are copied; pre-deployment files are moved manually and are not
+handled by the script. The destination feeds the data processing in the
+`NIST_wui-smoke-iaq-mitigation` repository.
+
+```json
+"wui_smoke": {
+  "base_path": "\\\\elwood.nist.gov\\732\\internal\\IAQ\\MH_Contamination_Fall_2026\\instruments",
+  "folders": {
+    "indoor_daq": "MH_DAQ_indoor",
+    "weather_station": "MH_DAQ_weather"
+  },
+  "start_date": "2026-07-31"
+}
+```
+
+**Change:**
+- `start_date` → The campaign deployment date in `YYYY-MM-DD` format. Files dated before it are skipped.
+- Leave `base_path` and `folders` as shown unless the Elwood share layout changes.
+
 #### **Thermostat (Ecobee)**
 
 ```json
@@ -118,6 +143,8 @@ All backup scripts use the same configuration file with these data flows:
 |--------|-------------|---------------------|
 | `mh_daq_file_backup.py` | `local_sources.indoor_daq.path` | `remote_destinations.mission.base_path\indoor_daq\` |
 | `mh_daq_file_backup.py` | `local_sources.outdoor_weather.path` | `remote_destinations.mission.base_path\weather_station\` |
+| `wui_smoke_file_backup.py` | `local_sources.indoor_daq.path` (files on/after `start_date`) | `remote_destinations.wui_smoke.base_path\MH_DAQ_indoor\` |
+| `wui_smoke_file_backup.py` | `local_sources.outdoor_weather.path` (files on/after `start_date`) | `remote_destinations.wui_smoke.base_path\MH_DAQ_weather\` |
 | `ecobee_thermostat_backup.py` | Ecobee API (internet) | `remote_destinations.thermostat.base_path\YYYY\` |
 
 The retired `src/completed_campaigns/epa_shower_file_backup.py` (EPA Shower campaign, ended 2026-07-16) copied the archive year of indoor DAQ and weather station data to `remote_destinations.epa_shower.base_path`. It is no longer run nightly.

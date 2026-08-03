@@ -53,6 +53,7 @@ Building423_IAQ-MH_DAQ/
 │       └── pdf_links.md              # Public download links for vendor manuals (copyright excluded)
 ├── src/                               # Python source code (for development)
 │   ├── mh_daq_file_backup.py         # Main DAQ data backup
+│   ├── wui_smoke_file_backup.py      # WUI Smoke campaign backup (deployment date onward, Elwood share)
 │   ├── ecobee_thermostat_backup.py   # Ecobee thermostat data download
 │   ├── ecobee_token_setup.py         # Ecobee API setup (one-time)
 │   └── completed_campaigns/          # Retired scripts from concluded campaigns
@@ -76,6 +77,7 @@ Building423_IAQ-MH_DAQ/
 |-----------|--------|-------|
 | **DAQ Backup** (Task Logger) | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
 | **Weather Station Backup** | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
+| **WUI Smoke Backup** | **Operational** | Active campaign (first burn 2026-07-31); copies indoor DAQ and weather (deployment date onward) to the Elwood share, runs nightly via `run_backup.bat` |
 | **EPA Shower Backup** | **Retired** | Campaign ended 2026-07-16; script moved to `src/completed_campaigns/` and removed from `run_backup.bat` |
 | **Ecobee Thermostat Data** | **Not operational** | Pending an Ecobee API key; script is deployed but logs an authorization error until a key is obtained |
 | **Splinterware Scheduler** | **Deployed** | Scheduled event configured on the Building 423 DAQ computer; runs `run_backup.bat` nightly |
