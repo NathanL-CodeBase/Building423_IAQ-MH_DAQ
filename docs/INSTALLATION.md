@@ -21,11 +21,11 @@ If the mission network drive is not accessible, **stop** and contact eldst on sl
 
 ---
 
-## Step 1: Verify Python and Pandas
+## Step 1: Verify Conda
 
-The backup system requires **Python 3.x** and the **pandas** library. Check if these are already installed on the DAQ computer:
+The backup system requires **Python 3.x** via a dedicated conda environment (`iaqmh_daq`), created from `environment.yaml`. Check that conda itself is already installed on the DAQ computer:
 
-### Check Python Installation
+### Check Conda Installation
 
 1. Open **Command Prompt** or **PowerShell** on the DAQ computer
 2. Type the following command:
@@ -35,17 +35,7 @@ The backup system requires **Python 3.x** and the **pandas** library. Check if t
 3. If you see a version number (e.g., `conda 23.5.0`), Python and conda are installed
 4. If you see `conda is not recognized...`, contact Nathan Lima or eldst for help
 
-### Check Pandas Installation
-
-1. In the same Command Prompt/PowerShell, type:
-   ```
-   conda list pandas
-   ```
-2. If you see `pandas` listed with a version, it is installed
-3. If pandas is not listed, install it with:
-   ```
-   conda install pandas
-   ```
+> The `iaqmh_daq` environment itself (with `pandas`, `requests`, `pyserial`) is created in Step 2, after the repository is cloned, since `environment.yaml` lives in the repo.
 
 ---
 
@@ -65,6 +55,13 @@ On the **DAQ desktop computer**, clone the repository from GitHub:
 4. This creates a `Building423_IAQ-MH_DAQ\` folder at that location — this is your `<repo_path>`
 
 > **Note:** If `git` is not installed, contact your Nathan Lima or eldest support or see the [Troubleshooting Guide](TROUBLESHOOTING.md) for installation instructions.
+
+5. Create the conda environment from the repo's `environment.yaml`:
+   ```
+   cd <repo_path>
+   conda env create -f environment.yaml
+   ```
+   This creates the `iaqmh_daq` environment with `pandas`, `requests`, and `pyserial`.
 
 ---
 
@@ -89,9 +86,9 @@ After cloning, verify that all files are in place:
 
 ---
 
-## Step 4: Configure the Batch File
+## Step 4: Configure Conda Settings
 
-The batch file needs to know where conda is installed. Follow these steps:
+The batch files (`run_backup.bat` and `run_weather_station_daq.bat`) read where conda is installed from `data_config.json`, not from the batch files themselves — this keeps machine-specific paths out of the tracked `.bat` files so a future `git pull` never conflicts with a hand edit here.
 
 1. On the DAQ computer, open **Command Prompt** and type:
    ```
@@ -99,17 +96,20 @@ The batch file needs to know where conda is installed. Follow these steps:
    ```
    > This shows where conda is installed — this is your `<conda_path>`.
 
-2. Using **Notepad**, open `<repo_path>\scripts\run_backup.bat`
+2. Using **Notepad**, open `<repo_path>\data_config.json` (copy it from `data_config.template.json` first if you haven't already)
 
-3. Find this line near the top:
+3. Find the `"conda"` section and set `activate_path`:
+   ```json
+   "conda": {
+     "activate_path": "<conda_path>\\Scripts\\activate.bat",
+     "env_name": "iaqmh_daq"
+   }
    ```
-   set CONDA_ACTIVATE=<conda_base>\Scripts\activate.bat
-   ```
-   Replace `<conda_base>` with the path returned by `conda info --base` in step 1.
+   Replace `<conda_path>` with the path returned by `conda info --base` in step 1. Leave `env_name` as `iaqmh_daq` unless you created the environment under a different name.
 
 4. Save the file (**File** → **Save**) and **close Notepad**
 
-> The Python script paths and log file path are derived automatically from the batch file's location — no edits needed for those.
+> The Python script paths and log file path are derived automatically from the batch file's location — no edits needed for those. Both batch files read the same `conda` block, so they always activate the same environment.
 
 ---
 
@@ -180,10 +180,9 @@ Schedule the backup to run automatically every night using Splinterware System S
 
 Before considering deployment complete, confirm:
 
-- Python and pandas are installed
+- Python and the `iaqmh_daq` conda environment are installed (`conda env create -f environment.yaml`)
 - Repository is cloned and `<repo_path>` is noted
-- `run_backup.bat` is updated with your `<conda_path>`
-- `data_config.json` created from template with correct local and network paths
+- `data_config.json` created from template with correct local and network paths, including the `conda` section's `activate_path`
 - Manual backup test completed successfully
 - Log file shows no errors
 - DAQ data appeared on mission network drive

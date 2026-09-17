@@ -9,7 +9,8 @@
     "2. Replace all YOUR_* placeholders with your actual values",
     "3. Verify all network paths are accessible before running scripts",
     "4. Sensitive data (API keys, tokens): use environment variables, NOT this file",
-    "5. Keep data_config.json in .gitignore — each deployment maintains its own copy"
+    "5. Keep data_config.json in .gitignore — each deployment maintains its own copy",
+    "6. Set conda.activate_path to your conda installation's activate.bat (run 'conda info --base' to find it)"
   ],
 
   "local_sources": {
@@ -22,6 +23,12 @@
       "path": "C:\\Users\\YOUR_USERNAME\\Desktop\\Outdoor_Data",
       "description": "Met One AIO2 weather station data via serial logger"
     }
+  },
+
+  "conda": {
+    "description": "Conda settings used by scripts/*.bat — keeps machine-specific paths out of tracked batch files, so a git pull never conflicts with a hand-edited .bat",
+    "activate_path": "C:\\Users\\YOUR_USERNAME\\miniforge3\\Scripts\\activate.bat",
+    "env_name": "iaqmh_daq"
   },
 
   "remote_destinations": {

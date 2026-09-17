@@ -217,6 +217,10 @@ settings.json
 data_config.json
 ecobee_tokens.json
 
+# Rotated log backups (weather_daq.log.1, .2, ...) — *.log above only
+# matches the current file, not RotatingFileHandler's numbered backups
+*.log.*
+
 # OS Specific
 Thumbs.db
 Desktop.ini

@@ -17,6 +17,9 @@ Institution: NIST
 Created: 2026-09-17
 Update log:
     2026-09-17: Initial version.
+    2026-09-17: Add rotating file handler alongside console logging, throttle
+        repeated malformed-line warnings, and back off on repeated unexpected
+        errors, so the process is safe to leave running unattended for months.
 
 Output:
     - <outdoor_weather_path>/<date>-Daily_MHOutdoor_Data.txt
@@ -30,6 +33,7 @@ import logging
 import sys
 import time
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import serial
@@ -73,6 +77,20 @@ def load_config(config_file="data_config.json"):
         f"Searched: {[str(p) for p in search_paths]}. "
         f"Create data_config.json from data_config.template.json."
     )
+
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+LOG_PATH = Path(__file__).parent / "weather_daq.log"
+LOG_MAX_BYTES = 5 * 1024 * 1024
+LOG_BACKUP_COUNT = 5
+
+# How often to summarize repeated malformed-line warnings, and the backoff
+# schedule (seconds) applied to repeated unexpected errors, so a persistent
+# fault (e.g. a full disk) cannot spin the loop and flood the log.
+MALFORMED_LOG_INTERVAL_S = 60
+ERROR_BACKOFF_SCHEDULE_S = [5, 10, 20, 40, 60]
 
 
 # ---------------------------------------------------------------------------
@@ -192,11 +210,23 @@ def write_row(file_handle, timestamp, fields):
 # Main
 # ---------------------------------------------------------------------------
 def main():
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
+    log_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(log_formatter)
+
+    file_handler = RotatingFileHandler(
+        LOG_PATH,
+        maxBytes=LOG_MAX_BYTES,
+        backupCount=LOG_BACKUP_COUNT,
+        encoding="utf-8",
     )
+    file_handler.setFormatter(log_formatter)
+
     logger = logging.getLogger("weather_daq")
+    logger.setLevel(logging.INFO)
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
 
     # Load config
     try:
@@ -231,6 +261,9 @@ def main():
 
     current_date_str = None
     file_handle = None
+    malformed_count = 0
+    malformed_window_start = time.monotonic()
+    consecutive_errors = 0
 
     def open_new_file(date_str):
         nonlocal file_handle
@@ -281,14 +314,22 @@ def main():
 
                 fields = parse_line(raw_line)
                 if fields is None:
-                    logger.warning(
-                        f"Unexpected field count: {len(raw_line.split(','))}, "
-                        f"expected {len(FIELD_NAMES)}"
-                    )
+                    malformed_count += 1
+                    elapsed_s = time.monotonic() - malformed_window_start
+                    if elapsed_s >= MALFORMED_LOG_INTERVAL_S:
+                        logger.warning(
+                            f"{malformed_count} malformed line(s) in the last "
+                            f"{elapsed_s:.0f}s (most recent field count "
+                            f"{len(raw_line.split(','))}, expected "
+                            f"{len(FIELD_NAMES)})"
+                        )
+                        malformed_count = 0
+                        malformed_window_start = time.monotonic()
                     continue
 
                 write_row(file_handle, now, fields)
                 logger.debug(f"Wrote row at {now}")
+                consecutive_errors = 0
 
         except serial.SerialException as e:
             logger.error(f"Serial error: {e}")
@@ -304,8 +345,12 @@ def main():
             logger.info("Interrupted by user")
             break
         except Exception as e:
-            logger.error(f"Unexpected error: {e}")
-            time.sleep(1)
+            backoff_s = ERROR_BACKOFF_SCHEDULE_S[
+                min(consecutive_errors, len(ERROR_BACKOFF_SCHEDULE_S) - 1)
+            ]
+            consecutive_errors += 1
+            logger.error(f"Unexpected error: {e}. Retrying in {backoff_s}s.")
+            time.sleep(backoff_s)
 
     # Cleanup
     if ser and ser.is_open:
