@@ -69,7 +69,8 @@ def load_config(config_file="data_config.json"):
                 return json.load(f)
 
     raise FileNotFoundError(
-        f"Configuration file '{config_file}' not found. Searched: {[str(p) for p in search_paths]}. "
+        f"Configuration file '{config_file}' not found. "
+        f"Searched: {[str(p) for p in search_paths]}. "
         f"Create data_config.json from data_config.template.json."
     )
 
@@ -207,11 +208,11 @@ def main():
     # Paths
     local_sources = config.get("local_sources", {})
     outdoor_cfg = local_sources.get("outdoor_weather", {})
-    outdoor_path = Path(outdoor_cfg.get("path", ""))
-    if not outdoor_path:
+    outdoor_path_str = outdoor_cfg.get("path")
+    if not outdoor_path_str:
         logger.error("outdoor_weather path not configured in data_config.json")
         sys.exit(1)
-    outdoor_path = outdoor_path.expanduser()
+    outdoor_path = Path(outdoor_path_str).expanduser()
 
     instruments = config.get("instruments", {})
     aio2_cfg = instruments.get("AIO2", {})

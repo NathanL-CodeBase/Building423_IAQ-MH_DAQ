@@ -59,12 +59,15 @@ Building423_IAQ-MH_DAQ/
 │   └── completed_campaigns/          # Retired scripts from concluded campaigns
 │       └── epa_shower_file_backup.py # EPA Shower backup (campaign ended 2026-07-16)
 ├── scripts/                           # Deployment scripts
-│   └── run_backup.bat                # Batch file to run all backups in sequence
+│   ├── run_backup.bat                # Batch file to run all backups in sequence
+│   ├── generate_weather_station_daq.py  # Serial-to-file bridge for the AIO2 weather station (temporary, while the weather DAQ system is offline)
+│   └── run_weather_station_daq.bat   # Batch file to launch the weather station generator (continuous process, not part of the nightly backup)
 ├── README.md                          # This file
 ├── LICENSE.md                         # Public domain license
 ├── CODEMETA.yaml                     # NIST metadata
 ├── CODEOWNERS                        # Repository maintainers
 ├── data_config.template.json          # Configuration template (copy to data_config.json)
+├── environment.yaml                   # Conda environment definition (iaqmh_daq)
 ├── fair-software.md                   # FAIR software principles documentation
 └── .gitignore                         # Git ignore file
 ```
@@ -76,7 +79,8 @@ Building423_IAQ-MH_DAQ/
 | Component | Status | Notes |
 |-----------|--------|-------|
 | **DAQ Backup** (Task Logger) | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
-| **Weather Station Backup** | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
+| **Weather Station Backup** | **Operational** | Copies AIO2 files to the mission network drive; running via `run_backup.bat`, deployed to DAQ computer |
+| **Weather Station DAQ Generator** | **Temporary** | Reads the AIO2 sensor over serial and writes the daily DAQ file directly, while the weather station's own DAQ system is offline; runs continuously via `run_weather_station_daq.bat` (separate from the nightly `run_backup.bat` cycle) |
 | **WUI Smoke Backup** | **Operational** | Active campaign (first burn 2026-07-31); copies indoor DAQ and weather (deployment date onward) to the Elwood share, runs nightly via `run_backup.bat` |
 | **EPA Shower Backup** | **Retired** | Campaign ended 2026-07-16; script moved to `src/completed_campaigns/` and removed from `run_backup.bat` |
 | **Ecobee Thermostat Data** | **Not operational** | Pending an Ecobee API key; script is deployed but logs an authorization error until a key is obtained |
@@ -89,20 +93,25 @@ Building423_IAQ-MH_DAQ/
 ### For End Users (Operators and Technicians)
 
 1. **Read first:** [Installation Guide](docs/INSTALLATION.md) for deployment steps
-2. **Configure paths:** 
+2. **Create the conda environment:**
+   ```
+   conda env create -f environment.yaml
+   ```
+   This creates the `iaqmh_daq` environment with `pandas`, `requests`, and `pyserial`. Activate it with `conda activate iaqmh_daq` before running any script manually.
+3. **Configure paths:** 
    - Copy `data_config.template.json` to `data_config.json`
    - Edit `data_config.json` to set your local and network paths (no hardcoded paths in scripts!)
    - See [Configuration Guide](docs/CONFIGURATION.md) for detailed instructions
-3. **Deploy:** Clone the repository to the DAQ computer and run test backup  
-4. **Monitor:** Check `batch_output.log` for successful backups
-5. **Troubleshoot:** See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) if issues arise
+4. **Deploy:** Clone the repository to the DAQ computer and run test backup  
+5. **Monitor:** Check `batch_output.log` for successful backups
+6. **Troubleshoot:** See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) if issues arise
 
 ### For Developers
 
 - Scripts are located in `src/` and are ready for continued development
 - All scripts load configuration from `data_config.json` — no hardcoded paths!
 - All backup functions are modular; new data sources can be added following the existing pattern
-- Python 3.x with `pandas` library is required (see [Configuration Guide](docs/CONFIGURATION.md))
+- Python 3.x via the `iaqmh_daq` conda environment (`environment.yaml`) is required (see [Configuration Guide](docs/CONFIGURATION.md))
 
 ---
 
@@ -126,7 +135,7 @@ Building423_IAQ-MH_DAQ/
 
 ### Software
 - **Python 3.x** (installed via Miniforge/Conda — run `conda info --base` to find your install path)
-- **pandas library** (install once in base conda environment)
+- **`iaqmh_daq` conda environment** — create it once from `environment.yaml` (`conda env create -f environment.yaml`); provides `pandas`, `requests`, and `pyserial`
 - **Windows command prompt/PowerShell** to run batch files
 
 ### For Ecobee Thermostat Data
