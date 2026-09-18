@@ -254,7 +254,7 @@ def main():
     file_template = aio2_cfg.get("file_template", "{date_str}-Daily_MHOutdoor_Data.txt")
 
     # Serial settings
-    COM_PORT = "COM5"
+    COM_PORT = "COM6"
     BAUD_RATE = 9600
     SERIAL_TIMEOUT_S = 2.0
 
