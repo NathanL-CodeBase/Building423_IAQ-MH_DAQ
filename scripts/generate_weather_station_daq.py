@@ -22,7 +22,7 @@ Update log:
         errors, so the process is safe to leave running unattended for months.
 
 Output:
-    - <outdoor_weather_path>/<date>-Daily_MHOutdoor_Data.txt
+    - <outdoor_weather_path>/<year>/<date>-Daily_MHOutdoor_Data.txt
     Tab-delimited with columns: Date, Time, Wind_Speed_m/s,
     Wind_Direction_deg, Ambient_Temperature_degC, Relative_Humidity_%,
     Barometric_Pressure_mb
@@ -37,6 +37,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import serial
+
 
 # ---------------------------------------------------------------------------
 # Configuration loading
@@ -150,10 +151,12 @@ def get_output_path(base_dir, date_str, file_template):
     Returns
     -------
     Path
-        Full path to output file.
+        Full path to output file. The year directory is created if needed.
     """
     filename = file_template.format(date_str=date_str)
-    return base_dir / filename
+    year_dir = base_dir / date_str[:4]
+    year_dir.mkdir(parents=True, exist_ok=True)
+    return year_dir / filename
 
 
 def write_header(file_handle):
@@ -165,15 +168,17 @@ def write_header(file_handle):
     file_handle : file object
         Open file handle.
     """
-    header = "\t".join([
-        "Date",
-        "Time",
-        "Wind_Speed_m/s",
-        "Wind_Direction_deg",
-        "Ambient_Temperature_degC",
-        "Relative_Humidity_%",
-        "Barometric_Pressure_mb",
-    ])
+    header = "\t".join(
+        [
+            "Date",
+            "Time",
+            "Wind_Speed_m/s",
+            "Wind_Direction_deg",
+            "Ambient_Temperature_degC",
+            "Relative_Humidity_%",
+            "Barometric_Pressure_mb",
+        ]
+    )
     file_handle.write(header + "\n")
     file_handle.flush()
 
