@@ -1,0 +1,13 @@
+name: iaqmh_daq
+channels:
+  - conda-forge
+dependencies:
+  - python=3.13
+  - pandas
+  - requests
+  - pyserial
+  - pytest
+  # NI-DAQmx Python API. The conda-forge package is named nidaqmx-python;
+  # the import remains "import nidaqmx". Requires the NI-DAQmx driver
+  # installed separately on the acquisition machine.
+  - nidaqmx-python

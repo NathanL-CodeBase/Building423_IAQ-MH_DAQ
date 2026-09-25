@@ -1,0 +1,26 @@
+{
+  "machine_name": "REPLACE_WITH_HOSTNAME",
+  "description": "Machine-specific config. Created from daq_local.template.json. Gitignored. Never commit real paths or SMTP details.",
+  "paths": {
+    "local_data_dir": "C:/Users/iaq/Desktop/MH_DAQ_Data",
+    "mission_data_dir": "//mission.el.nist.gov/Programs/energy_netzero/ventilation_iaq/Manufactured House/DAQ_Data/raw_data",
+    "mission_snapshot_dir": "//mission.el.nist.gov/Programs/energy_netzero/ventilation_iaq/Manufactured House/DAQ_Data/live_snapshot"
+  },
+  "serial": {
+    "com_port": "AUTO",
+    "auto_detect_baud": 9600,
+    "notes": "AUTO scans available COM ports for a valid AIO 2 line. Set to a fixed port like COM6 to override."
+  },
+  "smtp": {
+    "host": "smtp.nist.gov",
+    "port": 25,
+    "from_addr": "REPLACE_WITH_SENDER@nist.gov",
+    "to_addrs": ["REPLACE_WITH_RECIPIENT@nist.gov"]
+  },
+  "retention_days": 90,
+  "file_naming": {
+    "indoor_si": "{date}-MH_Indoor_SI.txt",
+    "indoor_raw": "{date}-MH_Indoor_raw.txt",
+    "outdoor": "{date}-MH_Outdoor.txt"
+  }
+}

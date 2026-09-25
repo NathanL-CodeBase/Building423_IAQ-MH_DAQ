@@ -1,0 +1,180 @@
+{
+  "config_version": "1.0",
+  "description": "MH cDAQ-9178 and Met One AIO 2 channel map, scales, and alarms. Committed, non-secret. Coefficients from NI MAX export cDAQ_Config.txt (rebuilt Aug 2026).",
+  "acquisition": {
+    "oversample_rate_hz": 1000,
+    "samples_per_record": 100,
+    "record_rate_hz": 1,
+    "notes": "Matches NI MAX task: 1 kHz clock, 100 samples averaged to one 1 Hz record."
+  },
+  "scales": {
+    "volts": {
+      "description": "Raw voltage passthrough (BLANK, 6V reference).",
+      "slope": 1.0, "intercept": 0.0,
+      "nominal_unit": "V", "si_unit": "V",
+      "si_factor": 1.0, "si_offset": 0.0
+    },
+    "setra_264_01": {
+      "description": "Setra 264 +/-0.1 in WC dP, 0-5 V. s/n 1873020.",
+      "slope": 0.04, "intercept": -0.1,
+      "nominal_unit": "inch WC", "si_unit": "Pa",
+      "si_factor": 248.84, "si_offset": 0.0
+    },
+    "setra_264_025": {
+      "description": "Setra 264 +/-0.25 in WC dP, 0-5 V. s/n 433719.",
+      "slope": 0.1, "intercept": -0.25,
+      "nominal_unit": "inch WC", "si_unit": "Pa",
+      "si_factor": 248.84, "si_offset": 0.0
+    },
+    "setra_264_05": {
+      "description": "Setra 264 +/-0.5 in WC dP, 0-5 V. s/n 3247147.",
+      "slope": 0.2, "intercept": -0.5,
+      "nominal_unit": "inch WC", "si_unit": "Pa",
+      "si_factor": 248.84, "si_offset": 0.0
+    },
+    "setra_264_1": {
+      "description": "Setra 264 +/-1.0 in WC dP, 0-5 V.",
+      "slope": 0.4, "intercept": -1.0,
+      "nominal_unit": "inch WC", "si_unit": "Pa",
+      "si_factor": 248.84, "si_offset": 0.0
+    },
+    "setra_264_15": {
+      "description": "Setra 264 +/-1.5 in WC dP, 0-5 V.",
+      "slope": 0.6, "intercept": -1.5,
+      "nominal_unit": "inch WC", "si_unit": "Pa",
+      "si_factor": 248.84, "si_offset": 0.0
+    },
+    "electra_flo_g5": {
+      "description": "Electra-Flo G5 return duct flow, 0-10 V to 0-2000 ACFM.",
+      "slope": 200.0, "intercept": 0.0,
+      "nominal_unit": "ACFM", "si_unit": "m3/h",
+      "si_factor": 1.69901, "si_offset": 0.0
+    },
+    "watts_w002et": {
+      "description": "Ohio Semitronics W-002E-T watts transducer on blower motor, 2-10 V to 0-1000 W. s/n 21080063.",
+      "slope": 125.0, "intercept": -250.0,
+      "nominal_unit": "W", "si_unit": "W",
+      "si_factor": 1.0, "si_offset": 0.0
+    },
+    "hmp155_rh": {
+      "description": "Vaisala HMP155 RH, 0-10 V to 0-100 %.",
+      "slope": 10.0, "intercept": 0.0,
+      "nominal_unit": "percent", "si_unit": "percent",
+      "si_factor": 1.0, "si_offset": 0.0
+    },
+    "hmp155_t": {
+      "description": "Vaisala HMP155 T, 0-10 V to -40 to +60 degC.",
+      "slope": 10.0, "intercept": -40.0,
+      "nominal_unit": "degC", "si_unit": "degC",
+      "si_factor": 1.0, "si_offset": 0.0
+    },
+    "hmp45a_rh": {
+      "description": "Vaisala HMP45A RH, 0-1 V to 0-100 %.",
+      "slope": 100.0, "intercept": 0.0,
+      "nominal_unit": "percent", "si_unit": "percent",
+      "si_factor": 1.0, "si_offset": 0.0
+    },
+    "hmp45a_t": {
+      "description": "Vaisala HMP45A T, 0-1 V to -40 to +60 degC.",
+      "slope": 100.0, "intercept": -40.0,
+      "nominal_unit": "degC", "si_unit": "degC",
+      "si_factor": 1.0, "si_offset": 0.0
+    }
+  },
+  "cdaq": {
+    "chassis_name": "cDAQ1",
+    "voltage_terminal_config": "RSE",
+    "voltage_range": {"min": -10.0, "max": 10.0},
+    "channels": [
+      {"name": "dP_Liv-Hi_M1_C0",    "physical_channel": "cDAQ1Mod1/ai0", "type": "voltage", "scale": "setra_264_01"},
+      {"name": "dP_Liv-Lo_M1_C1",    "physical_channel": "cDAQ1Mod1/ai1", "type": "voltage", "scale": "setra_264_01"},
+      {"name": "dP_Bed3-E-Hi_M1_C2", "physical_channel": "cDAQ1Mod1/ai2", "type": "voltage", "scale": "setra_264_01"},
+      {"name": "dP_Bed3-E-Lo_M1_C3", "physical_channel": "cDAQ1Mod1/ai3", "type": "voltage", "scale": "setra_264_01"},
+      {"name": "dP_Fam-S-Hi_M1_C4",  "physical_channel": "cDAQ1Mod1/ai4", "type": "voltage", "scale": "setra_264_01"},
+      {"name": "dP_Fam-S-Lo_M1_C5",  "physical_channel": "cDAQ1Mod1/ai5", "type": "voltage", "scale": "setra_264_01"},
+      {"name": "dP_Fam-W-Hi_M1_C6",  "physical_channel": "cDAQ1Mod1/ai6", "type": "voltage", "scale": "setra_264_01"},
+      {"name": "dP_Fam-W-Lo_M1_C7",  "physical_channel": "cDAQ1Mod1/ai7", "type": "voltage", "scale": "setra_264_01"},
+      {"name": "BLANK_M2_C0",           "physical_channel": "cDAQ1Mod2/ai0", "type": "voltage", "scale": "volts"},
+      {"name": "cfm_return_duct_M2_C1", "physical_channel": "cDAQ1Mod2/ai1", "type": "voltage", "scale": "electra_flo_g5"},
+      {"name": "watts_blowermtr_M2_C2", "physical_channel": "cDAQ1Mod2/ai2", "type": "voltage", "scale": "watts_w002et"},
+      {"name": "dP_HVACfilter_A_M2_C3", "physical_channel": "cDAQ1Mod2/ai3", "type": "voltage", "scale": "setra_264_025"},
+      {"name": "dP_HVACfilter_B_M2_C4", "physical_channel": "cDAQ1Mod2/ai4", "type": "voltage", "scale": "setra_264_05"},
+      {"name": "dP_HVACfilter_C_M2_C5", "physical_channel": "cDAQ1Mod2/ai5", "type": "voltage", "scale": "setra_264_1"},
+      {"name": "dP_HVACfilter_D_M2_C6", "physical_channel": "cDAQ1Mod2/ai6", "type": "voltage", "scale": "setra_264_15"},
+      {"name": "6V_Test_M2_C7",         "physical_channel": "cDAQ1Mod2/ai7", "type": "voltage", "scale": "volts"},
+      {"name": "RH_Bed1_M3_C0",  "physical_channel": "cDAQ1Mod3/ai0", "type": "voltage", "scale": "hmp155_rh"},
+      {"name": "RH_Bed2_M3_C1",  "physical_channel": "cDAQ1Mod3/ai1", "type": "voltage", "scale": "hmp45a_rh"},
+      {"name": "RH_Bed3_M3_C2",  "physical_channel": "cDAQ1Mod3/ai2", "type": "voltage", "scale": "hmp45a_rh"},
+      {"name": "RH_Liv_M3_C3",   "physical_channel": "cDAQ1Mod3/ai3", "type": "voltage", "scale": "hmp155_rh"},
+      {"name": "RH_Fam_M3_C4",   "physical_channel": "cDAQ1Mod3/ai4", "type": "voltage", "scale": "hmp155_rh"},
+      {"name": "RH_MBa_M3_C5",   "physical_channel": "cDAQ1Mod3/ai5", "type": "voltage", "scale": "hmp45a_rh"},
+      {"name": "RH_Ba1_M3_C6",   "physical_channel": "cDAQ1Mod3/ai6", "type": "voltage", "scale": "hmp45a_rh"},
+      {"name": "RH_UR_M3_C7",    "physical_channel": "cDAQ1Mod3/ai7", "type": "voltage", "scale": "hmp45a_rh"},
+      {"name": "RH_Gar_M4_C0",     "physical_channel": "cDAQ1Mod4/ai0", "type": "voltage", "scale": "hmp155_rh"},
+      {"name": "RH_Attic_M4_C1",   "physical_channel": "cDAQ1Mod4/ai1", "type": "voltage", "scale": "hmp45a_rh"},
+      {"name": "RH_Out_M4_C2",     "physical_channel": "cDAQ1Mod4/ai2", "type": "voltage", "scale": "hmp45a_rh"},
+      {"name": "RH_HVAC-S_M4_C3",  "physical_channel": "cDAQ1Mod4/ai3", "type": "voltage", "scale": "hmp155_rh"},
+      {"name": "T_Bed1_M4_C4",     "physical_channel": "cDAQ1Mod4/ai4", "type": "voltage", "scale": "hmp155_t"},
+      {"name": "T_Bed2_M4_C5",     "physical_channel": "cDAQ1Mod4/ai5", "type": "voltage", "scale": "hmp45a_t"},
+      {"name": "T_Bed3_M4_C6",     "physical_channel": "cDAQ1Mod4/ai6", "type": "voltage", "scale": "hmp45a_t"},
+      {"name": "T_Liv_M4_C7",      "physical_channel": "cDAQ1Mod4/ai7", "type": "voltage", "scale": "hmp155_t"},
+      {"name": "T_Fam_M5_C0",      "physical_channel": "cDAQ1Mod5/ai0", "type": "voltage", "scale": "hmp155_t"},
+      {"name": "T_MBa_M5_C1",      "physical_channel": "cDAQ1Mod5/ai1", "type": "voltage", "scale": "hmp45a_t"},
+      {"name": "T_Ba1_M5_C2",      "physical_channel": "cDAQ1Mod5/ai2", "type": "voltage", "scale": "hmp45a_t"},
+      {"name": "T_UR_M5_C3",       "physical_channel": "cDAQ1Mod5/ai3", "type": "voltage", "scale": "hmp45a_t"},
+      {"name": "T_Gar_M5_C4",      "physical_channel": "cDAQ1Mod5/ai4", "type": "voltage", "scale": "hmp155_t"},
+      {"name": "T_Attic_M5_C5",    "physical_channel": "cDAQ1Mod5/ai5", "type": "voltage", "scale": "hmp45a_t"},
+      {"name": "T_Out_M5_C6",      "physical_channel": "cDAQ1Mod5/ai6", "type": "voltage", "scale": "hmp45a_t"},
+      {"name": "T_HVAC-S_M5_C7",   "physical_channel": "cDAQ1Mod5/ai7", "type": "voltage", "scale": "hmp155_t"},
+      {"name": "T_blowermtr1_M6_C0", "physical_channel": "cDAQ1Mod6/ai0", "type": "thermocouple", "thermocouple_type": "J", "cjc_source": "BUILT_IN", "si_unit": "degC", "t_min": 0.0, "t_max": 100.0},
+      {"name": "T_blowermtr2_M6_C1", "physical_channel": "cDAQ1Mod6/ai1", "type": "thermocouple", "thermocouple_type": "J", "cjc_source": "BUILT_IN", "si_unit": "degC", "t_min": 0.0, "t_max": 100.0}
+    ]
+  },
+"aio2": {
+    "description": "Met One AIO 2 sonic weather sensor over RS-485 to USB, 9600 8N1, 1 Hz ASCII, comma-delimited. Metric defaults are SI.",
+    "baud_rate": 9600,
+    "bytesize": 8,
+    "parity": "N",
+    "stopbits": 1,
+    "field_names": [
+      "wind_speed", "wind_direction", "air_temp", "relative_humidity",
+      "barometric_pressure", "rain", "solar_radiation", "battery_voltage",
+      "compass_heading", "config", "checksum"
+    ],
+    "output_columns": [
+      {"field": "wind_speed",          "header": "Wind_Speed_m/s",           "si_unit": "m/s",     "present": true},
+      {"field": "wind_direction",      "header": "Wind_Direction_deg",       "si_unit": "deg",     "present": true,  "note": "Referenced to magnetic north; no declination set via MD command. For true north, set declination at the sensor."},
+      {"field": "air_temp",            "header": "Ambient_Temperature_degC", "si_unit": "degC",    "present": true},
+      {"field": "relative_humidity",   "header": "Relative_Humidity_%",      "si_unit": "percent", "present": true},
+      {"field": "barometric_pressure", "header": "Barometric_Pressure_mb",   "si_unit": "hPa",     "present": true,  "note": "1 mb equals 1 hPa; header kept as mb for continuity with prior files."},
+      {"field": "rain",                "header": "Rain_mm",                  "si_unit": "mm",      "present": false, "note": "External contact-closure rain gauge not connected. Column may read 0 until a gauge is added."},
+      {"field": "solar_radiation",     "header": "Solar_Radiation_W/m2",     "si_unit": "W/m2",    "present": false, "note": "External solar sensor (Met One 096A-2) not connected. Column may read 0 until a sensor is added."},
+      {"field": "battery_voltage",     "header": "Battery_Voltage_V",        "si_unit": "V",       "present": true,  "note": "Present in the serial string only when BV is enabled at the sensor. Verify BV1 is set."},
+      {"field": "compass_heading",     "header": "Compass_Heading_deg",      "si_unit": "deg",     "present": true,  "note": "Present in the serial string only when CV is enabled at the sensor. Verify CV1 is set."}
+    ],
+    "notes": "Standard serial string per AIO 2-9800 Rev E is WS,WD,AT,RH,BP,RN,SR,BV,CONFIG,CheckSum. Battery voltage (BV) and compass heading (CV) appear only when toggled on at the sensor, so the field count varies. The Step 3 parser maps fields by count and validates each line with the checksum (decimal sum of all characters from the start of the message through the character before the asterisk). CONFIG and CheckSum are metadata, not logged as data columns."
+  },
+  "alarms": {
+    "email": {
+      "enabled": true,
+      "min_interval_s": 300,
+      "notes": "min_interval_s throttles repeat emails per rule so a stuck condition does not flood the inbox."
+    },
+    "quality": {
+      "dropout_s": 30,
+      "stale_s": 60,
+      "frozen_count": 60,
+      "notes": "dropout_s: no new record. stale_s: newest record older than this. frozen_count: identical value repeated this many records."
+    },
+    "rules": [
+      {
+        "channel": "T_Gar_M5_C4",
+        "description": "Garage over-temperature",
+        "high": 28.0,
+        "low": null,
+        "dwell_s": 60,
+        "unit": "degC"
+      }
+    ]
+  }
+}

@@ -31,9 +31,19 @@ Met One AIO 2 sonic weather sensor: RS-485 to USB adapter, 9600 baud, 8N1, ASCII
 
 The RS-485 to USB adapter can be grabbed by Windows as a "Microsoft Serial BallPoint" mouse, which blocks the COM port. Already fixed on the DAQ PC by disabling the sermouse driver. Record here in case the machine is rebuilt: set `HKLM\SYSTEM\CurrentControlSet\Services\sermouse\Start` to 4 and reboot. Verify the key exists before changing it.
 
-## Target machine
+## Machines
 
-DAQ PC: Windows 11, i5-1245U (12th gen), 16 GB RAM, 500 GB storage. Keep installs minimal. NI-DAQmx driver already installed. Python via conda-forge, environment `iaqmh_daq`. Will add `nidaqmx`, `pyserial`, `pytest` (confirm exact list before install). PowerShell is the shell. Splinterware System Scheduler triggers `.bat` files for autostart (Windows Task Scheduler is not available for this).
+Two distinct machines. Do not conflate them.
+
+Dev and test box: NISTTeleworkSys. Where all development and simulation-backed testing happens. No cDAQ hardware attached. Its `daq_local.json` has `machine_name = NISTTeleworkSys` and non-hardware placeholder paths. Steps 1 to 4 (config, scaling, tests, simulator) run and are validated here.
+
+DAQ PC (acquisition machine): Windows 11, i5-1245U (12th gen), 16 GB RAM, 500 GB storage. Keep installs minimal. NI-DAQmx driver already installed. Runs the headless daemon against real hardware. Gets its own `daq_local.json` with its own hostname, real Mission and desktop paths, and the actual COM port. Only the supervised cutover in the validation phase happens here.
+
+Both machines: Python via conda-forge, environment `iaqmh_daq`. PowerShell is the shell. Splinterware System Scheduler triggers `.bat` files for autostart on the DAQ PC (Windows Task Scheduler is not available for this). The committed `daq_config.json` is shared across both machines; only the local file differs.
+
+### Environment
+
+Env `iaqmh_daq` built from `environment.yaml` (conda-forge): python 3.13, pandas, requests, pyserial, pytest, and `nidaqmx-python`. Note the conda package is `nidaqmx-python` (import stays `import nidaqmx`); the bare `nidaqmx` conda package is dead (last upload 2019, no files). `nidaqmx-python 1.6.0` confirmed importing on NISTTeleworkSys. The NI-DAQmx runtime driver is only needed for real-hardware calls, so the import and the simulation backend run fine on the driverless dev box.
 
 ## Coefficients from NI MAX export
 
@@ -118,10 +128,10 @@ Package name: `mh_daq`. Test repo for now: `mh-daq-rebuild` under NathanL-CodeBa
 
 ## Build order
 
-1. Config schema and loader, plus committed template. Channel map and scales baked in from the NI MAX export.
-2. Scaling module (raw volts to SI, both retained).
-3. Offline validation tests (pytest), no hardware. Assert each SI conversion against the coefficient table. Example asserts: +/-0.1 in WC Setra maps 0-5 V to -24.88 to +24.88 Pa; Electra-Flo maps 0-10 V to 0 to about 3398 m3/h; HMP155 T maps 0-10 V to -40 to +60 C.
-4. Simulation backend producing realistic channel data, so the whole system runs with no hardware.
+1. Config schema and loader, plus committed template. Channel map and scales baked in from the NI MAX export. DONE, validated on NISTTeleworkSys (42 channels, 12 scales, 1 alarm rule). Delivered: `config/daq_config.json`, `config/daq_local.template.json`, `src/mh_daq/__init__.py`, `src/mh_daq/config.py`, `.gitignore`, `environment.yaml`.
+2. Scaling module (raw volts to SI, both retained). DONE, validated on NISTTeleworkSys (18 pytest cases pass). Delivered: `src/mh_daq/scaling.py`, `tests/test_scaling.py`, `pytest.ini`, and the nine-column AIO 2 schema in `config/daq_config.json`. SI endpoints proven: Setra +/-0.1 in WC maps 0-5 V to -24.88 to +24.88 Pa; Electra-Flo maps 0-10 V to 0 to 3398 m3/h; HMP155 T maps 0-10 V to -40 to +60 degC. inch WC to Pa uses 248.84 (60 degF basis).
+3. Offline validation tests (pytest), no hardware. DONE (folded into step 2).
+4. Simulation backend producing realistic channel data, so the whole system runs with no hardware. Plus the AIO 2 line parser with checksum validation and resilient field-count handling (BV and CV may be off, so field count varies).
 5. Acquisition daemon: cDAQ task, serial reader, scaling, local daily file writer with SI units in headers.
 6. Mission mirror with offline queue and retry.
 7. Alarm engine and SMTP.
@@ -164,9 +174,17 @@ Build and test against the simulation backend before the daemon ever holds the r
 ## Decisions locked
 
 - Thermocouples are Type J (matches NI MAX export).
-- Output units are SI, with units in file headers.
-- Log both raw volts and SI, in two files.
+- Output units are SI, with units in file headers. inch WC to Pa at 248.84 (60 degF basis).
+- Log both raw volts and SI, in two indoor files. Outdoor is one file (AIO 2 outputs engineering units, no raw split).
+- Outdoor file carries nine measurement columns: wind_speed, wind_direction, air_temp, relative_humidity, barometric_pressure, rain, solar_radiation, battery_voltage, compass_heading. config and checksum are metadata, not logged; checksum used for line validation.
+- Rain and solar external sensors not currently connected; columns annotated present=false, may read 0 until added.
+- Wind direction referenced to magnetic north; no declination set. True north would require the MD command at the sensor.
+- battery_voltage and compass_heading appear in the serial string only if BV and CV are enabled at the sensor. Parser handles variable field count. One-time terminal check (BV1, CV1, Q) needed if those columns should be populated.
 - Serial mouse driver already disabled on the DAQ PC.
 - Headless autostart daemon plus an on-demand RDP status tool.
 - UI and webpages read Mission, never the DAQ PC. Web serving runs on a separate box.
 - Local write first, then mirror to Mission with graceful handling of Mission being unavailable.
+
+## Known environment friction
+
+The dev repo currently lives under `C:/Users/nml/OneDrive - NIST/Documents/GitHub/...`. OneDrive sync locks paths and caused two issues so far: a stale bytecode cache, and pytest failing to write `.pytest_cache` (WinError 5). Neither affects correctness. Plan: move the repo to a plain local path (for example `C:/Users/nml/dev/`) and let git and GitHub handle sync. On the DAQ PC, do NOT place the repo or the data and log folders under OneDrive; continuous writes and OneDrive do not mix. This aligns with the user preference against OneDrive - NIST paths.
