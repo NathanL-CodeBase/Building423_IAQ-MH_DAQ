@@ -31,6 +31,18 @@ Met One AIO 2 sonic weather sensor: RS-485 to USB adapter, 9600 baud, 8N1, ASCII
 
 The RS-485 to USB adapter can be grabbed by Windows as a "Microsoft Serial BallPoint" mouse, which blocks the COM port. Already fixed on the DAQ PC by disabling the sermouse driver. Record here in case the machine is rebuilt: set `HKLM\SYSTEM\CurrentControlSet\Services\sermouse\Start` to 4 and reboot. Verify the key exists before changing it.
 
+## Confirmed from the DAQ PC (2026-09-25, read-only checks)
+
+- Device enumeration matches config exactly: cDAQ1 (cDAQ-9178), cDAQ1Mod1 to Mod5 (NI 9201), cDAQ1Mod6 (NI 9213). No physical-channel string changes needed.
+- nidaqmx 1.6.0 present on the DAQ PC. Repo cloned at C:/Users/iaq/Documents/building423_iaq-mh_daq.
+- COM ports: COM1 (built-in), COM3 (Intel AMT SOL), COM6 (USB Serial Port, the AIO 2). AIO 2 is on COM6.
+- AIO 2 checksum formula CONFIRMED against 5 live lines: decimal sum of all characters before the asterisk, including the comma immediately preceding it. Step 4 compute_checksum is correct.
+- AIO 2 real line format CONFIRMED: WS,WD,AT,RH,BP,RN,SR,BV,CV,CONFIG,*CHECKSUM. Example: 002.3,005,+020.2,037,1000.2,000.00,0000,23.2,032,M0,*02509. Both BV and CV already enabled; battery_voltage and compass_heading populate with no terminal-mode change.
+- Step 4 parser produces correct fields from real lines. No change needed.
+- Battery voltage reads 23.2 V (24 V nominal supply, within 8-36 VDC spec). Confirm supply is 24 V.
+- Rain (000.00) and solar (0000, flickers to 0002) read as expected with no external sensors connected. Treat as unpopulated.
+- Caution: serial capture required COM6 free, so the temp weather script was not holding the port at capture time. Ensure the temp script is running again so no weather data gap opens during the active campaign.
+
 ## Machines
 
 Two distinct machines. Do not conflate them.
