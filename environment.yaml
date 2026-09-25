@@ -6,3 +6,8 @@ dependencies:
   - pandas
   - requests
   - pyserial
+  - pytest
+  # NI-DAQmx Python API. The conda-forge package is named nidaqmx-python;
+  # the import remains "import nidaqmx". Requires the NI-DAQmx driver
+  # installed separately on the acquisition machine.
+  - nidaqmx-python
