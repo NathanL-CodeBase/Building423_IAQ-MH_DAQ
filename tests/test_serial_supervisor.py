@@ -247,3 +247,37 @@ def test_writer_concurrent_indoor_outdoor(config, tmp_path):
         to.join()
     be.close()
     assert not errors, f"Concurrent writer errors: {errors[:3]}"
+
+
+def test_supervisor_writes_heartbeat(config, tmp_path):
+    import json as _json
+
+    local = tmp_path / "local"
+    be = SimulationBackend(config, seed=1)
+    writer = DailyWriter(config, base_dir=local)
+    indoor = AcquisitionDaemon(config, be, writer)
+    reader = OutdoorReader(config, writer, source_factory=lambda: CannedSource([VALID] * 100))
+    mirror = MissionMirror(config, local, tmp_path / "m", tmp_path / "s")
+    alarms = AlarmEngine(config, RecordingEmailSender())
+
+    # Point the heartbeat at the temp dir (config default is the real data dir).
+    sup = Supervisor(config, indoor, reader, mirror, alarms)
+    sup._hb_path = local / "heartbeat.json"
+
+    sup.start()
+    deadline = time.monotonic() + 5.0
+    hb = None
+    while time.monotonic() < deadline:
+        if sup._hb_path.exists():
+            try:
+                hb = _json.loads(sup._hb_path.read_text())
+                if hb.get("last_indoor_record"):
+                    break
+            except (ValueError, OSError):
+                pass
+        time.sleep(0.05)
+    sup.stop()
+
+    assert hb is not None, "heartbeat never written"
+    assert "indoor" in hb["threads_alive"]
+    assert hb["threads_alive"]["indoor"] is True

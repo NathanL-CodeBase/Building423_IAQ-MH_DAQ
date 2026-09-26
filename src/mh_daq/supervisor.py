@@ -16,10 +16,13 @@ Update log:
         alarm hook on the indoor cycle, and a watchdog thread.
 """
 
+import json
 import logging
+import os
 import threading
 import time
 from datetime import datetime
+from pathlib import Path
 
 logger = logging.getLogger("mh_daq.supervisor")
 
@@ -48,6 +51,9 @@ class Supervisor:
         self._threads = []
         self._latest_outdoor = {}
         self._outdoor_lock = threading.Lock()
+        self._started_at = None
+        self._last_indoor_ts = None
+        self._hb_path = Path(config.local.local_data_dir) / "heartbeat.json"
 
         # Wire shared state: outdoor reader publishes here, indoor loop reads it.
         self._outdoor._publish = self._set_latest_outdoor
@@ -67,10 +73,40 @@ class Supervisor:
             self._indoor._latest_outdoor = dict(self._latest_outdoor)
         si = self._indoor_run_once()
         now = datetime.now()
+        self._last_indoor_ts = now
         events = self._alarms.check(si, now)
         for e in events:
             logger.info("Indoor alarm event: %s", e)
         return si
+
+    def _write_heartbeat(self):
+        """Write a small liveness file atomically. Never raises."""
+        hb = {
+            "written_at": datetime.now().isoformat(timespec="seconds"),
+            "started_at": (
+                self._started_at.isoformat(timespec="seconds") if self._started_at else None
+            ),
+            "last_indoor_record": (
+                self._last_indoor_ts.isoformat(timespec="seconds") if self._last_indoor_ts else None
+            ),
+            "latest_outdoor_wind_speed": self._latest_outdoor.get("wind_speed"),
+            "mission_available": self._mirror.mission_available(),
+            "alarms": self._alarms.current_state(),
+            "threads_alive": {t.name: t.is_alive() for t in self._threads},
+        }
+        try:
+            self._hb_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self._hb_path.with_suffix(".json.tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(hb, f, indent=2)
+            os.replace(tmp, self._hb_path)
+        except OSError as e:
+            logger.warning("Heartbeat write failed: %s", e)
+
+    def _heartbeat_loop(self):
+        while not self._stop.is_set():
+            self._write_heartbeat()
+            self._stop.wait(1.0)
 
     def _watchdog_loop(self):
         """Check acquisition dropout on a timer independent of the read loop."""
@@ -83,11 +119,13 @@ class Supervisor:
     def start(self):
         """Start all threads."""
         logger.info("Supervisor starting.")
+        self._started_at = datetime.now()
         self._threads = [
             threading.Thread(target=self._indoor.run_loop, name="indoor", daemon=True),
             threading.Thread(target=self._outdoor.run_loop, name="outdoor", daemon=True),
             threading.Thread(target=self._mirror.run_loop, name="mirror", daemon=True),
             threading.Thread(target=self._watchdog_loop, name="watchdog", daemon=True),
+            threading.Thread(target=self._heartbeat_loop, name="heartbeat", daemon=True),
         ]
         for t in self._threads:
             t.start()
