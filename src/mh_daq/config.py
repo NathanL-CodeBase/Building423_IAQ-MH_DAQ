@@ -117,6 +117,13 @@ class AcquisitionConfig:
 
 
 @dataclass
+class MirrorConfig:
+    snapshot_interval_s: int
+    inprogress_interval_s: int
+    retry_interval_s: int
+
+
+@dataclass
 class LocalConfig:
     machine_name: str
     local_data_dir: Path
@@ -147,6 +154,7 @@ class SystemConfig:
     quality: QualityConfig
     alarm_email: dict
     alarm_rules: list
+    mirror: MirrorConfig
     local: LocalConfig
 
     def channel_names(self):
@@ -327,6 +335,13 @@ def _parse(committed, local):
         record_rate_hz=int(acq["record_rate_hz"]),
     )
 
+    m = committed.get("mirror", {})
+    mirror = MirrorConfig(
+        snapshot_interval_s=int(m.get("snapshot_interval_s", 60)),
+        inprogress_interval_s=int(m.get("inprogress_interval_s", 0)),
+        retry_interval_s=int(m.get("retry_interval_s", 30)),
+    )
+
     lp = local["paths"]
     ls = local["serial"]
     lsm = local["smtp"]
@@ -357,6 +372,7 @@ def _parse(committed, local):
         quality=quality,
         alarm_email=committed["alarms"]["email"],
         alarm_rules=rules,
+        mirror=mirror,
         local=local_cfg,
     )
 

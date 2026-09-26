@@ -7,6 +7,12 @@
     "record_rate_hz": 1,
     "notes": "Matches NI MAX task: 1 kHz clock, 100 samples averaged to one 1 Hz record."
   },
+  "mirror": {
+    "snapshot_interval_s": 60,
+    "inprogress_interval_s": 0,
+    "retry_interval_s": 30,
+    "notes": "snapshot_interval_s: how often to push latest_snapshot.json to Mission. inprogress_interval_s: how often to push the current day's still-open daily files (0 means only push them once they roll over and become complete). retry_interval_s: base tick and retry cadence. Completed daily files are pushed whenever Mission is reachable, comparing local to Mission, so a missed day self-heals on the next successful tick."
+  },
   "scales": {
     "volts": {
       "description": "Raw voltage passthrough (BLANK, 6V reference).",

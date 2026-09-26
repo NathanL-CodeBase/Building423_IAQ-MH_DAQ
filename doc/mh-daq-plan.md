@@ -144,13 +144,15 @@ Package name: `mh_daq`. Test repo for now: `mh-daq-rebuild` under NathanL-CodeBa
 2. Scaling module (raw volts to SI, both retained). DONE, validated on NISTTeleworkSys (18 pytest cases pass). Delivered: `src/mh_daq/scaling.py`, `tests/test_scaling.py`, `pytest.ini`, and the nine-column AIO 2 schema in `config/daq_config.json`. SI endpoints proven: Setra +/-0.1 in WC maps 0-5 V to -24.88 to +24.88 Pa; Electra-Flo maps 0-10 V to 0 to 3398 m3/h; HMP155 T maps 0-10 V to -40 to +60 degC. inch WC to Pa uses 248.84 (60 degF basis).
 3. Offline validation tests (pytest), no hardware. DONE (folded into step 2).
 4. Simulation backend producing realistic channel data, so the whole system runs with no hardware. Plus the AIO 2 line parser with checksum validation and resilient field-count handling (BV and CV may be off, so field count varies).
-5. Acquisition daemon: cDAQ task, serial reader, scaling, local daily file writer with SI units in headers.
-6. Mission mirror with offline queue and retry.
-7. Alarm engine and SMTP.
-8. Snapshot publish layer for future webpages (Mission).
-9. RDP status tool.
-10. Splinterware autostart of the daemon via `.bat`. Status tool launched manually from the desktop.
-11. Web box and pages: later, out of current scope.
+5. Acquisition daemon: cDAQ task, serial reader, scaling, local daily file writer with SI units in headers. Core DONE (indoor path): `src/mh_daq/writer.py` (three daily files, per-day metadata sidecar, atomic snapshot, SI units in single-row headers), `src/mh_daq/daemon.py` (run_once plus monotonic-paced run_loop), `tests/test_writer_daemon.py`. Outdoor serial reader wired in step 7. Validated on NISTTeleworkSys.
+6. Mission mirror with offline queue and retry. DONE, implemented as a filesystem diff (no in-memory queue, self-heals across outages and restarts): `src/mh_daq/mirror.py`, `tests/test_mirror_alarms.py` (mirror portion). Snapshot 60 s, in-progress off by default, retry 30 s.
+7. Alarm engine and SMTP. DONE: `src/mh_daq/alarms.py` (threshold rules with dwell, trip/clear/re-notify, frozen detection, dropout watchdog; injectable email sender). Real SMTP send confirmed from NISTTeleworkSys through smtp.nist.gov:25. Tests use a recording sender. 46 tests passing total.
+8. Threading supervisor (step 7 in build): cDAQ loop, AIO 2 serial reader, mirror, and dropout watchdog as independent threads, plus COM auto-detect with manual override. Makes the outdoor path live and produces one runnable daemon.
+9. Snapshot publish layer for future webpages (Mission). Snapshot already written and mirrored; webpage feed format is future work.
+10. RDP status tool.
+11. Real nidaqmx backend implementing the shared interface, then the supervised cutover.
+12. Splinterware autostart of the daemon via `.bat`. Status tool launched manually from the desktop.
+13. Web box and pages: later, out of current scope.
 
 Steps 1 to 4 touch no hardware and no network. That is the current priority: prove the SI math before scheduling a cutover.
 
