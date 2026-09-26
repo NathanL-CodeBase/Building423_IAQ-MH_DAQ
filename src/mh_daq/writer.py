@@ -19,6 +19,7 @@ Update log:
 
 import json
 import os
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -81,6 +82,7 @@ class DailyWriter:
         self._naming = config.local.file_naming
         self._current_date = None
         self._fh = {}  # key -> open file handle
+        self._lock = threading.Lock()  # serializes roll and writes across threads
 
         # Precompute header column lists in task order.
         self._si_cols = [_si_header_name(c, config) for c in config.channels]
@@ -190,16 +192,16 @@ class DailyWriter:
         si_values : dict
             Channel name to SI value.
         """
-        self._roll(timestamp)
         d = timestamp.strftime(_DATE_FMT)
         t = timestamp.strftime(_TIME_FMT)
-
         raw_row = [d, t] + [_fmt(raw_values[c.name]) for c in self._config.channels]
         si_row = [d, t] + [_fmt(si_values[c.name]) for c in self._config.channels]
-        self._fh["raw"].write("\t".join(raw_row) + "\n")
-        self._fh["raw"].flush()
-        self._fh["si"].write("\t".join(si_row) + "\n")
-        self._fh["si"].flush()
+        with self._lock:
+            self._roll(timestamp)
+            self._fh["raw"].write("\t".join(raw_row) + "\n")
+            self._fh["raw"].flush()
+            self._fh["si"].write("\t".join(si_row) + "\n")
+            self._fh["si"].flush()
 
     def write_outdoor(self, timestamp, fields):
         """Append one outdoor record.
@@ -211,12 +213,13 @@ class DailyWriter:
             Parsed AIO 2 fields (field name to string). Missing optional fields
             (BV or CV off, or rain/solar absent) are written as empty.
         """
-        self._roll(timestamp)
         d = timestamp.strftime(_DATE_FMT)
         t = timestamp.strftime(_TIME_FMT)
         row = [d, t] + [fields.get(f, "") for f in self._out_fields]
-        self._fh["out"].write("\t".join(row) + "\n")
-        self._fh["out"].flush()
+        with self._lock:
+            self._roll(timestamp)
+            self._fh["out"].write("\t".join(row) + "\n")
+            self._fh["out"].flush()
 
     def write_snapshot(self, timestamp, si_values, outdoor_fields, alarm_state=None):
         """Rewrite the latest-values snapshot atomically.
@@ -243,13 +246,15 @@ class DailyWriter:
         }
         path = self._snapshot_path()
         tmp = path.with_suffix(".json.tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(snap, f, indent=2)
-        os.replace(tmp, path)  # atomic on Windows and POSIX
+        with self._lock:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(snap, f, indent=2)
+            os.replace(tmp, path)  # atomic on Windows and POSIX
 
     def close(self):
         """Close all open daily files. Safe to call more than once."""
-        self._close_handles()
+        with self._lock:
+            self._close_handles()
 
     def __enter__(self):
         return self

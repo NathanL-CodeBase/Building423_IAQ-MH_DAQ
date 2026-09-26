@@ -147,11 +147,11 @@ Package name: `mh_daq`. Test repo for now: `mh-daq-rebuild` under NathanL-CodeBa
 5. Acquisition daemon: cDAQ task, serial reader, scaling, local daily file writer with SI units in headers. Core DONE (indoor path): `src/mh_daq/writer.py` (three daily files, per-day metadata sidecar, atomic snapshot, SI units in single-row headers), `src/mh_daq/daemon.py` (run_once plus monotonic-paced run_loop), `tests/test_writer_daemon.py`. Outdoor serial reader wired in step 7. Validated on NISTTeleworkSys.
 6. Mission mirror with offline queue and retry. DONE, implemented as a filesystem diff (no in-memory queue, self-heals across outages and restarts): `src/mh_daq/mirror.py`, `tests/test_mirror_alarms.py` (mirror portion). Snapshot 60 s, in-progress off by default, retry 30 s.
 7. Alarm engine and SMTP. DONE: `src/mh_daq/alarms.py` (threshold rules with dwell, trip/clear/re-notify, frozen detection, dropout watchdog; injectable email sender). Real SMTP send confirmed from NISTTeleworkSys through smtp.nist.gov:25. Tests use a recording sender. 46 tests passing total.
-8. Threading supervisor (step 7 in build): cDAQ loop, AIO 2 serial reader, mirror, and dropout watchdog as independent threads, plus COM auto-detect with manual override. Makes the outdoor path live and produces one runnable daemon.
-9. Snapshot publish layer for future webpages (Mission). Snapshot already written and mirrored; webpage feed format is future work.
-10. RDP status tool.
-11. Real nidaqmx backend implementing the shared interface, then the supervised cutover.
-12. Splinterware autostart of the daemon via `.bat`. Status tool launched manually from the desktop.
+8. Threading supervisor (step 7 in build): cDAQ loop, AIO 2 serial reader, mirror, and dropout watchdog as independent threads, plus COM auto-detect with manual override. DONE: `src/mh_daq/serial_source.py` (LineSource, PySerialSource, auto_detect_port validating by parsed line, resolve_port), `src/mh_daq/outdoor_reader.py` (threaded AIO 2 reader, own arrival timestamp, independent reconnect), `src/mh_daq/supervisor.py` (four independent threads, shared latest-outdoor into snapshot, alarm hook on indoor cycle, dropout watchdog thread), `tests/test_serial_supervisor.py`. Writer made thread-safe with a lock (fixed an intermittent rollover race). 52 tests passing. Only untested-until-hardware piece: PySerialSource opening a real port, already proven when 5 live AIO 2 lines were captured.
+9. Snapshot publish layer for future webpages (Mission). Snapshot written by indoor loop, mirrored to Mission every 60 s. Webpage feed format is future work.
+10. Real nidaqmx backend implementing the shared AcquisitionBackend interface (the only component that touches cDAQ hardware), plus an entry-point script and the Splinterware .bat. NEXT.
+11. Supervised cutover on the DAQ PC: offline math already validated; use 6V reference channel to confirm AD path; brief stop-LabVIEW, run-Python, compare, roll back if needed.
+12. RDP status tool.
 13. Web box and pages: later, out of current scope.
 
 Steps 1 to 4 touch no hardware and no network. That is the current priority: prove the SI math before scheduling a cutover.
