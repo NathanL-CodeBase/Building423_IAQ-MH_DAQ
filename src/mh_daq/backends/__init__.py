@@ -7,4 +7,20 @@ backend so the daemon code is identical on the dev box and the DAQ PC.
 from .base import AcquisitionBackend, BackendError
 from .simulation import SimulationBackend
 
-__all__ = ["AcquisitionBackend", "BackendError", "SimulationBackend"]
+# The real backend imports nidaqmx, which is present but only fully functional
+# with the NI driver. Import lazily so the package still loads on machines
+# without the driver (the simulator path stays usable).
+try:
+    from .nidaqmx_backend import NiDaqmxBackend
+
+    _HAS_NIDAQMX = True
+except Exception:  # noqa: BLE001
+    NiDaqmxBackend = None
+    _HAS_NIDAQMX = False
+
+__all__ = [
+    "AcquisitionBackend",
+    "BackendError",
+    "SimulationBackend",
+    "NiDaqmxBackend",
+]
