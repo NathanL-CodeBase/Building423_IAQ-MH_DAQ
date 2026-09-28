@@ -149,10 +149,15 @@ Package name: `mh_daq`. Test repo for now: `mh-daq-rebuild` under NathanL-CodeBa
 7. Alarm engine and SMTP. DONE: `src/mh_daq/alarms.py` (threshold rules with dwell, trip/clear/re-notify, frozen detection, dropout watchdog; injectable email sender). Real SMTP send confirmed from NISTTeleworkSys through smtp.nist.gov:25. Tests use a recording sender. 46 tests passing total.
 8. Threading supervisor (step 7 in build): cDAQ loop, AIO 2 serial reader, mirror, and dropout watchdog as independent threads, plus COM auto-detect with manual override. DONE: `src/mh_daq/serial_source.py` (LineSource, PySerialSource, auto_detect_port validating by parsed line, resolve_port), `src/mh_daq/outdoor_reader.py` (threaded AIO 2 reader, own arrival timestamp, independent reconnect), `src/mh_daq/supervisor.py` (four independent threads, shared latest-outdoor into snapshot, alarm hook on indoor cycle, dropout watchdog thread), `tests/test_serial_supervisor.py`. Writer made thread-safe with a lock (fixed an intermittent rollover race). 52 tests passing. Only untested-until-hardware piece: PySerialSource opening a real port, already proven when 5 live AIO 2 lines were captured.
 9. Snapshot publish layer for future webpages (Mission). Snapshot written by indoor loop, mirrored to Mission every 60 s. Webpage feed format is future work.
-10. Real nidaqmx backend implementing the shared AcquisitionBackend interface (the only component that touches cDAQ hardware), plus an entry-point script and the Splinterware .bat. NEXT.
-11. Supervised cutover on the DAQ PC: offline math already validated; use 6V reference channel to confirm AD path; brief stop-LabVIEW, run-Python, compare, roll back if needed.
-12. RDP status tool.
-13. Web box and pages: later, out of current scope.
+10. Real nidaqmx backend implementing the shared AcquisitionBackend interface. DONE: `src/mh_daq/backends/nidaqmx_backend.py` (mixed voltage + Type J thermocouple task, RSE, built-in CJC, added in config order, oversample-and-average), registered lazily in `backends/__init__.py`. Entry point `run_daq.py` (--sim / --hardware), autostart `start_mh_daq.bat`. Written against confirmed nidaqmx 1.6.0 API. Hardware-only, validated in cutover not pytest. Full daemon dry-run in sim confirmed on NISTTeleworkSys.
+11. Heartbeat and RDP status tool. DONE: supervisor writes atomic heartbeat.json each second (uptime, last indoor record, thread liveness, Mission availability, alarm state); `status.py` one-shot and --watch reader. Reader only, safe over RDP. Key channel lookups use plain channel names (snapshot indoor_si keys), 6V ref reads ~6.0 in sim. 53 tests passing.
+12. Supervised hardware cutover on the DAQ PC (Monday service day). NEXT. Offline math validated; use 6V reference to confirm AD path; stop LabVIEW cDAQ VI and temp weather script, run `run_daq.py --hardware`, watch `status.py --watch`, compare key channels against last LabVIEW values, roll back to LabVIEW if anything is off. Checklist and comparison helper to be delivered before Monday.
+13. Splinterware autostart via start_mh_daq.bat (after cutover is trusted).
+14. Web box and pages: later, out of current scope.
+
+## Current status (2026-09-25)
+
+Entire acquisition system built and validated in simulation, 53 tests passing on NISTTeleworkSys. All hardware-adjacent facts confirmed on the DAQ PC: device names (cDAQ1, Mod1-6), AIO 2 checksum formula (5 live lines), nidaqmx 1.6.0 API (enums and methods), AIO 2 real line format (BV and CV both on). Remaining: supervised hardware cutover Monday, then autostart, then the future webpage box. Repo pushed to main on NathanL-CodeBase (private), to fold into usnistgov/Building423_IAQ-MH_DAQ later as a major update.
 
 Steps 1 to 4 touch no hardware and no network. That is the current priority: prove the SI math before scheduling a cutover.
 
