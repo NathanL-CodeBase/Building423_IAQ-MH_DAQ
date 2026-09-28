@@ -88,9 +88,14 @@ class MissionMirror:
         os.replace(tmp, dst)
 
     def _mission_daily_path(self, local_file):
-        """Map a local daily file to its Mission path, preserving year folder."""
+        """Map a local daily file to its Mission path under the system subdir.
+
+        Files land in mission_data_dir/<mission_subdir>/<year>/, keeping this
+        system's data separate from the LabVIEW-era indoor_daq and
+        weather_station folders. Local layout is unaffected.
+        """
         year = local_file.parent.name
-        return self._mission / year / local_file.name
+        return self._mission / self._config.mirror.mission_subdir / year / local_file.name
 
     def _iter_local_daily(self):
         """Yield local daily .txt files under year folders."""
@@ -157,7 +162,7 @@ class MissionMirror:
                 is_before = fd < today
                 if is_before != before_today:
                     continue
-                dst = self._mission / year_dir.name / f.name
+                dst = self._mission / self._config.mirror.mission_subdir / year_dir.name / f.name
                 if self._should_copy(f, dst):
                     self._copy_atomic(f, dst)
                     copied += 1

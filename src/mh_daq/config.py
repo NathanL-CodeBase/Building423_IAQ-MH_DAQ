@@ -121,6 +121,7 @@ class MirrorConfig:
     snapshot_interval_s: int
     inprogress_interval_s: int
     retry_interval_s: int
+    mission_subdir: str
 
 
 @dataclass
@@ -340,6 +341,7 @@ def _parse(committed, local):
         snapshot_interval_s=int(m.get("snapshot_interval_s", 60)),
         inprogress_interval_s=int(m.get("inprogress_interval_s", 0)),
         retry_interval_s=int(m.get("retry_interval_s", 30)),
+        mission_subdir=m.get("mission_subdir", "mh_daq"),
     )
 
     lp = local["paths"]

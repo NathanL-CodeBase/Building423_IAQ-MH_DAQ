@@ -47,7 +47,7 @@ def test_mirror_copies_completed(config, tmp_path):
     mir = MissionMirror(config, local, mission, snap)
     n = mir.sync_completed(now)
     assert n == 1
-    assert (mission / "2026" / "20260924-MH_Indoor_SI.txt").exists()
+    assert (mission / "mh_daq" / "2026" / "20260924-MH_Indoor_SI.txt").exists()
 
 
 def test_mirror_inprogress_gated(config, tmp_path):
@@ -62,7 +62,7 @@ def test_mirror_inprogress_gated(config, tmp_path):
     assert mir.sync_completed(now) == 0
     # In-progress sync copies it.
     assert mir.sync_inprogress(now) == 1
-    assert (mission / "2026" / "20260925-MH_Indoor_SI.txt").exists()
+    assert (mission / "mh_daq" / "2026" / "20260925-MH_Indoor_SI.txt").exists()
 
 
 def test_mirror_snapshot(config, tmp_path):
@@ -89,7 +89,7 @@ def test_mirror_unavailable_then_recovers(config, tmp_path):
     # Mission comes back
     mission.mkdir()
     mir.tick(now)
-    assert (mission / "2026" / "20260924-MH_Indoor_SI.txt").exists()
+    assert (mission / "mh_daq" / "2026" / "20260924-MH_Indoor_SI.txt").exists()
 
 
 def test_mirror_recopies_changed(config, tmp_path):
