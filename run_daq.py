@@ -49,8 +49,19 @@ def setup_logging(local_data_dir):
     return root
 
 
-def build_serial_factory(config):
-    """Return a callable that opens a fresh serial source on the resolved port."""
+def build_serial_factory(config, sim=False):
+    """Return a callable that opens a fresh serial source.
+
+    In sim mode, returns a synthetic AIO 2 source so the outdoor path runs with
+    no hardware. Otherwise opens the real port (auto-detected or configured).
+    """
+    if sim:
+        from src.mh_daq.backends.sim_serial import SimSerialSource
+
+        def factory():
+            return SimSerialSource()
+
+        return factory
 
     def factory():
         port = resolve_port(config)
@@ -91,7 +102,9 @@ def main():
 
     writer = DailyWriter(config)
     indoor = AcquisitionDaemon(config, backend, writer)
-    outdoor = OutdoorReader(config, writer, source_factory=build_serial_factory(config))
+    outdoor = OutdoorReader(
+        config, writer, source_factory=build_serial_factory(config, sim=args.sim)
+    )
     mirror = MissionMirror(config)
     sender = SmtpEmailSender(
         config.local.smtp_host,

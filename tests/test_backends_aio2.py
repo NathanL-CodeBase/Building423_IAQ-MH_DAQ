@@ -130,3 +130,17 @@ def test_compute_checksum_matches_manual_shape():
     body = "000.0,000,+024.5,045,0970.5,000.00,0000,M0"
     line = _line_with_checksum(body)
     assert compute_checksum(line) == sum(ord(c) for c in body)
+
+
+def test_sim_serial_lines_parse():
+    from src.mh_daq.aio2 import parse_line
+    from src.mh_daq.backends.sim_serial import SimSerialSource
+
+    src = SimSerialSource(seed=1, rate_hz=0)  # rate 0 = no sleep, for tests
+    for _ in range(5):
+        line = src.readline()
+        fields = parse_line(line)  # raises if checksum or format is wrong
+        assert "wind_speed" in fields
+        assert "battery_voltage" in fields
+        assert "compass_heading" in fields
+    src.close()

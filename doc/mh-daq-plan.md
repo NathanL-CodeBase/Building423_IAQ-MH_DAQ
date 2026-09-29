@@ -43,6 +43,52 @@ The RS-485 to USB adapter can be grabbed by Windows as a "Microsoft Serial BallP
 - Rain (000.00) and solar (0000, flickers to 0002) read as expected with no external sensors connected. Treat as unpopulated.
 - Caution: serial capture required COM6 free, so the temp weather script was not holding the port at capture time. Ensure the temp script is running again so no weather data gap opens during the active campaign.
 
+## Current status (2026-09-28, after first hardware cutover attempt)
+
+First hardware cutover ran on the DAQ PC service day. Daemon ran on real hardware: DAQmx task opened 42 channels at 1 kHz x 100 samples, 1 Hz loop, AIO 2 auto-detected on COM6, all five threads alive, Mission reachable. Validated against today's LabVIEW output channel for channel:
+- 6V reference: LabVIEW 5.707-5.733, new system 5.716. MATCH. (Battery has aged to ~5.71 on both; not a fault. Both systems agree, confirming the voltage path is faithful.)
+- T_HVAC-S_M5_C7: both read ~-40 (0 V). The HVAC supply HMP155 temperature probe is currently disconnected/unpowered; both systems report it identically. RH side (RH_HVAC-S) reads ~81 on both, so only the T probe is off.
+- House dP channels (dP_Liv-Hi etc.): both at 0 V floor (LabVIEW -0.100 in WC, new system -24.878 Pa). House dP Setras are intentionally not connected; configured in case they are reconnected. HVAC filter Setras ARE connected and reading.
+- Conclusion: new system reads the hardware faithfully. Cutover validated. (Note: an early-session comparison against a stale 01/05/2026 LabVIEW file was misleading because module 2 was wired differently then; the current 09/28/2026 file is the correct baseline and confirms the match.)
+
+Decision: NOT switching yet. Reasons: (1) this week's test differs from past tests; keep data consistent on LabVIEW for the week. (2) A lab-test period follows for a week or two when the MH DAQ is least needed; do the full move then (daemon + UI + web) in one deliberate window. Rolled back to LabVIEW for now.
+
+## Backup replacement (decided 2026-09-28, pending layout choice)
+
+The daemon's Mission mirror is intended to REPLACE the existing Mission backup, not run alongside it. Current state and the open decision:
+- Existing backup: blindly copies C:/Users/iaq/Desktop/Outdoor_Data and C:/Users/iaq/Desktop/Task_Logger_Data (and subdirs) wholesale to Mission raw_data. It targets the LabVIEW-era source folders.
+- New daemon: writes MH_Indoor_SI.txt, MH_Indoor_raw.txt, MH_Outdoor.txt, metadata, snapshot to C:/Users/iaq/Desktop/MH_DAQ_Data (confirmed present, files appear), and mirrors to Mission raw_data with a year-subfolder layout.
+- The two do not align: same Mission root, different file names and folder structure. If the daemon became system of record while the old backup kept running, the old backup would copy stale LabVIEW folders and miss the new data.
+- End state: retire the old backup script; the daemon mirror does that job, and better (local-first so outages never block acquisition, filesystem-diff self-heal vs blind recopy).
+- OPEN DECISION before the full move: does the daemon write into Mission raw_data with its own year-based layout and new names (and the WUI smoke chain is updated to read those), OR does the daemon match the old folder-and-name layout so nothing downstream changes? Nathan owns this call (he owns downstream analysis).
+- mission_data_dir (raw_data) is correct and is where the backup script saves. Confirmed.
+- mission_snapshot_dir (live_snapshot) does NOT exist on Mission and was not created (snapshot mirror runs on a 60 s interval; dir is auto-created on first copy). Decide deliberately where the snapshot lives, or defer until the webpage exists.
+
+## Web dashboard (in progress, 2026-09-29)
+
+Group-private live dashboard built and working against sim data on NISTTeleworkSys.
+- `web/dashboard.py`: FastAPI app. Endpoints: /api/snapshot (current values), /api/trend (recent SI series). One HTML page polls snapshot every 3 s, plot every 15 s.
+- Indoor cards grouped: Temperature, Relative Humidity, Differential Pressure, HVAC System (HVAC supply T and RH, filter dPs, return flow, blower power, blower TCs), Reference/Other. Grouping split of HVAC sensors into their own section is provisional; confirm vs folding HVAC T/RH back with the other temps/humidities.
+- Plotly vendored at `web/static/plotly.min.js` (4.56 MB, 2.35.3) so no CDN dependency. The web box will likely have no outbound internet.
+- Separate conda env `mh_daq_web` (fastapi, uvicorn, pandas) from `environment-web.yaml`, keeping web deps off the DAQ PC.
+- Data root: config.local.local_data_dir by default; MH_DAQ_DATA_ROOT env var override. For Mission later, snapshot (live_snapshot) and dailies (raw_data/mh_daq) are two roots; will need a second env var for the snapshot path then.
+- Run: sim daemon in one window (`run_daq.py --sim`), dashboard in another (`python -m uvicorn web.dashboard:app --host 127.0.0.1 --port 8000`, mh_daq_web env, from repo root).
+
+Open dashboard work, next passes:
+- Channel picker for the trend plot (currently fixed 4 channels). Note: channels span very different scales (degC ~21, % ~45, V ~6, Pa ~0); picker needs unit-grouping or a secondary axis so small-range channels are not flattened.
+- Weather-only public view (NIST-internal, AIO 2 only, view plus CSV download).
+- Access separation: group-private full-data page vs NIST-internal weather page.
+- Endpoint tests once the shape settles.
+- Deploy to the web box (Windows 11 now; may move to a Linux VM via IT; uvicorn runs the same on both).
+- Vendor note: plotly.min.js is committed so the web box needs no internet.
+
+## Remaining before full move
+- Decide Mission layout / backup retirement (above).
+- RDP status tool: DONE and working (status.py). compare_cutover.py helper added for the cutover.
+- Second cutover during the lab-test lull: full startup including UI and webpage feed.
+- Splinterware autostart via start_mh_daq.bat, only after the daemon has run attended and trusted for a day or two.
+- Retire the old Mission backup script as an explicit cutover step.
+
 ## Machines
 
 Two distinct machines. Do not conflate them.
