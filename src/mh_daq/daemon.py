@@ -83,7 +83,9 @@ class AcquisitionDaemon:
                     next_t = time.monotonic()
         finally:
             self._backend.close()
-            self._writer.close()
+            # The writer is shared with the outdoor reader and owned by the
+            # supervisor, which closes it after all threads join. Do not close
+            # it here.
             logger.info("Acquisition loop stopped.")
 
     def stop(self):

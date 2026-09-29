@@ -82,6 +82,7 @@ class DailyWriter:
         self._naming = config.local.file_naming
         self._current_date = None
         self._fh = {}  # key -> open file handle
+        self._closed = False
         self._lock = threading.Lock()  # serializes roll and writes across threads
 
         # Precompute header column lists in task order.
@@ -197,6 +198,8 @@ class DailyWriter:
         raw_row = [d, t] + [_fmt(raw_values[c.name]) for c in self._config.channels]
         si_row = [d, t] + [_fmt(si_values[c.name]) for c in self._config.channels]
         with self._lock:
+            if self._closed:
+                return
             self._roll(timestamp)
             self._fh["raw"].write("\t".join(raw_row) + "\n")
             self._fh["raw"].flush()
@@ -217,6 +220,8 @@ class DailyWriter:
         t = timestamp.strftime(_TIME_FMT)
         row = [d, t] + [fields.get(f, "") for f in self._out_fields]
         with self._lock:
+            if self._closed:
+                return
             self._roll(timestamp)
             self._fh["out"].write("\t".join(row) + "\n")
             self._fh["out"].flush()
@@ -254,6 +259,7 @@ class DailyWriter:
     def close(self):
         """Close all open daily files. Safe to call more than once."""
         with self._lock:
+            self._closed = True
             self._close_handles()
 
     def __enter__(self):

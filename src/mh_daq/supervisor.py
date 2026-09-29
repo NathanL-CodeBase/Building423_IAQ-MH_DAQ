@@ -140,6 +140,11 @@ class Supervisor:
         self._mirror.stop()
         for t in self._threads:
             t.join(timeout=10.0)
+        # Close the shared writer last, after all writing threads have stopped.
+        try:
+            self._indoor._writer.close()
+        except Exception:
+            pass
         logger.info("Supervisor stopped.")
 
     def run_forever(self):

@@ -90,40 +90,53 @@ def api_snapshot():
 
 
 @app.get("/api/trend")
+@app.get("/api/channels")
+def api_channels():
+    """Return all plottable indoor channels with their SI units and groups.
+
+    Used to build the picker. Units come from the config scales; groups reuse
+    the same categories as the card sections.
+    """
+    from src.mh_daq.scaling import si_units_by_channel
+
+    units = dict(si_units_by_channel(_config))
+    items = []
+    for name, unit in units.items():
+        items.append({"channel": name, "unit": unit})
+    return JSONResponse({"channels": items})
+
+
+@app.get("/api/trend")
 def api_trend(minutes: int = 30, channels: str = ""):
-    """Return recent time series for selected SI channels.
+    """Return recent SI series for selected channels, downsampled for long spans.
 
     Parameters
     ----------
     minutes : int
-        Lookback window.
+        Lookback window. Large values (a month is 43200) are downsampled.
     channels : str
-        Comma-separated plain channel names (for example T_Liv_M4_C7). Empty
-        returns a small default set.
+        Comma-separated plain channel names. Empty returns a small default set.
 
     Returns
     -------
-    JSON with 'time' (ISO strings) and one array per requested channel.
+    JSON with 'time' (ISO), one array per channel, and 'units' mapping each
+    returned channel to its SI unit, so the page can stack subplots by unit.
     """
+    from src.mh_daq.scaling import si_units_by_channel
+
+    unit_map = dict(si_units_by_channel(_config))
+
     default = ["T_Liv_M4_C7", "T_Gar_M5_C4", "RH_Liv_M3_C3", "6V_Test_M2_C7"]
     wanted = [c.strip() for c in channels.split(",") if c.strip()] or default
 
     now = datetime.now()
-    frames = []
-    # Read today and, if the window crosses midnight, yesterday too.
-    for day in {now.date(), (now - timedelta(minutes=minutes)).date()}:
-        p = _si_file_for(datetime(day.year, day.month, day.day))
-        if not p.exists():
-            continue
-        try:
-            df = pd.read_csv(p, sep="\t")
-        except (OSError, pd.errors.ParserError):
-            continue
-        frames.append(df)
-    if not frames:
-        return JSONResponse({"available": False, "time": []})
+    start = now - timedelta(minutes=minutes)
+    df = read_span("indoor_si", start, now)
+    if df.empty:
+        return JSONResponse({"available": False, "time": [], "units": {}})
 
-    df = pd.concat(frames, ignore_index=True)
+    df = downsample(df, max_points=3000)
+
     # SI columns are named channel_unit; map plain name -> actual column.
     colmap = {}
     for want in wanted:
@@ -131,18 +144,11 @@ def api_trend(minutes: int = 30, channels: str = ""):
         if match:
             colmap[want] = match[0]
 
-    # Build a datetime from Date + Time. Try the writer's known format first,
-    # then fall back to a flexible parse so a locale or format difference does
-    # not silently drop every row.
-    combined = df["Date"].astype(str) + " " + df["Time"].astype(str)
-    dt = pd.to_datetime(combined, format="%m/%d/%Y %H:%M:%S", errors="coerce")
-    if dt.isna().all():
-        dt = pd.to_datetime(combined, errors="coerce")
-    mask = dt >= (now - timedelta(minutes=minutes))
-    dt = dt[mask]
-    out = {"available": True, "time": [t.isoformat() for t in dt]}
+    out = {"available": True, "time": [t.isoformat() for t in df["dt"]], "units": {}}
     for want, col in colmap.items():
-        out[want] = df.loc[mask, col].round(3).where(pd.notna(df.loc[mask, col]), None).tolist()
+        series = df[col].round(4).where(pd.notna(df[col]), None)
+        out[want] = series.tolist()
+        out["units"][want] = unit_map.get(want, "")
     return JSONResponse(out)
 
 
@@ -255,6 +261,17 @@ _PAGE = """<!doctype html>
   .card .unit { font-size: 12px; color: #9aa4b2; margin-left: 3px; }
   #plot { background: #161a22; border: 1px solid #262b36; border-radius: 8px; padding: 8px; }
   .section-title { font-size: 13px; color: #9aa4b2; margin: 18px 0 8px; text-transform: uppercase; letter-spacing: .04em; }
+  .controls { display:flex; align-items:center; gap:14px; margin-bottom:8px; }
+  .controls select { background:#0f1115; color:#e6e6e6; border:1px solid #2a3140;
+                     border-radius:5px; padding:5px 7px; }
+  .controls button.secondary { background:#2a3140; color:#fff; border:none;
+                     border-radius:6px; padding:6px 12px; cursor:pointer; font-size:13px; }
+  #picker-count { font-size:12px; color:#9aa4b2; }
+  .picker { background:#161a22; border:1px solid #262b36; border-radius:8px;
+            padding:12px; margin-bottom:10px; max-height:260px; overflow:auto; }
+  .picker .grp { font-size:11px; color:#9aa4b2; text-transform:uppercase;
+                 letter-spacing:.04em; margin:8px 0 4px; }
+  .picker label { display:inline-flex; align-items:center; gap:5px; margin:0 14px 6px 0; font-size:13px; }
 </style>
 </head>
 <body>
@@ -266,8 +283,22 @@ _PAGE = """<!doctype html>
   <div class="section-title">Weather (AIO 2)</div>
   <div class="grid" id="weather"></div>
   <div id="indoor-groups"></div>
-  <div class="section-title">Trends (last 30 min)</div>
-  <div id="plot" style="height:420px;"></div>
+  <div class="section-title">Trends</div>
+  <div class="controls">
+    <label>Window
+      <select id="window">
+        <option value="30">30 min</option>
+        <option value="180">3 hours</option>
+        <option value="1440">1 day</option>
+        <option value="10080">1 week</option>
+        <option value="43200">1 month</option>
+      </select>
+    </label>
+    <button class="secondary" onclick="togglePicker()">Choose channels</button>
+    <span id="picker-count"></span>
+  </div>
+  <div id="picker" class="picker" style="display:none;"></div>
+  <div id="plot" style="height:520px;"></div>
 </main>
 <script>
 const UNIT = {
@@ -342,25 +373,103 @@ async function refresh(){
   } catch(e){ st.textContent = "error"; st.className="down"; }
 }
 
-async function refreshPlot(){
+let ALL_CHANNELS = [];        // [{channel, unit}]
+let SELECTED = new Set(["T_Liv_M4_C7","T_Gar_M5_C4","RH_Liv_M3_C3","6V_Test_M2_C7"]);
+
+async function loadChannels(){
   try{
-    const r = await fetch("/api/trend?minutes=30");
+    const r = await fetch("/api/channels");
     const d = await r.json();
-    if (!d.available || !d.time || d.time.length===0){ return; }
-    const traces = [];
-    for (const k of Object.keys(d)){
-      if (k==="available"||k==="time") continue;
-      traces.push({x:d.time, y:d[k], mode:"lines", name:k});
-    }
-    Plotly.react("plot", traces, {
-      margin:{l:48,r:16,t:8,b:36}, paper_bgcolor:"#161a22", plot_bgcolor:"#161a22",
-      font:{color:"#c8ccd4"}, xaxis:{gridcolor:"#262b36"}, yaxis:{gridcolor:"#262b36"},
-      legend:{orientation:"h"}
-    }, {displayModeBar:false, responsive:true});
-  } catch(e){ console.error("plot error:", e); }
+    ALL_CHANNELS = d.channels || [];
+    buildPicker();
+    updatePickerCount();
+  }catch(e){ console.error("channels error:", e); }
 }
 
-refresh(); refreshPlot();
+function buildPicker(){
+  // Group picker entries by unit for readability.
+  const byUnit = {};
+  for(const c of ALL_CHANNELS){ (byUnit[c.unit] ||= []).push(c.channel); }
+  const box = document.getElementById("picker");
+  let html = "";
+  for(const unit of Object.keys(byUnit).sort()){
+    html += `<div class="grp">${unit}</div>`;
+    html += byUnit[unit].map(ch=>{
+      const on = SELECTED.has(ch) ? "checked" : "";
+      return `<label><input type="checkbox" value="${ch}" ${on} onchange="toggleChannel('${ch}',this.checked)"> ${ch}</label>`;
+    }).join("");
+  }
+  box.innerHTML = html;
+}
+
+function toggleChannel(ch, on){
+  if(on) SELECTED.add(ch); else SELECTED.delete(ch);
+  updatePickerCount();
+  refreshPlot();
+}
+
+function updatePickerCount(){
+  document.getElementById("picker-count").textContent =
+    SELECTED.size + " channel(s) selected";
+}
+
+function togglePicker(){
+  const p = document.getElementById("picker");
+  p.style.display = p.style.display==="none" ? "block" : "none";
+}
+
+function windowMinutes(){ return parseInt(document.getElementById("window").value,10); }
+
+async function refreshPlot(){
+  try{
+    if(SELECTED.size===0){ Plotly.purge("plot"); return; }
+    const chans = [...SELECTED].join(",");
+    const mins = windowMinutes();
+    const r = await fetch(`/api/trend?minutes=${mins}&channels=${encodeURIComponent(chans)}`);
+    const d = await r.json();
+    if(!d.available || !d.time || d.time.length===0){
+      Plotly.purge("plot"); return;
+    }
+    // Group selected channels by unit -> one subplot row per unit.
+    const units = d.units || {};
+    const groups = {};
+    for(const ch of Object.keys(d)){
+      if(ch==="available"||ch==="time"||ch==="units") continue;
+      const u = units[ch] || "";
+      (groups[u] ||= []).push(ch);
+    }
+    const unitList = Object.keys(groups).sort();
+    const n = unitList.length;
+    const traces = [];
+    const layout = {
+      paper_bgcolor:"#161a22", plot_bgcolor:"#161a22", font:{color:"#c8ccd4"},
+      margin:{l:56,r:16,t:10,b:40}, showlegend:true, legend:{orientation:"h"},
+      grid:{rows:n, columns:1, pattern:"independent", roworder:"top to bottom"}
+    };
+    unitList.forEach((u,i)=>{
+      const xa = i===0 ? "x" : "x"+(i+1);
+      const ya = i===0 ? "y" : "y"+(i+1);
+      for(const ch of groups[u]){
+        traces.push({x:d.time, y:d[ch], name:ch, mode:"lines",
+                     xaxis:xa, yaxis:ya});
+      }
+      const xkey = i===0 ? "xaxis" : "xaxis"+(i+1);
+      const ykey = i===0 ? "yaxis" : "yaxis"+(i+1);
+      layout[ykey] = {title:{text:u}, gridcolor:"#262b36"};
+      layout[xkey] = {gridcolor:"#262b36",
+        rangeslider: i===(n-1) ? {visible:true, thickness:0.06} : {visible:false},
+        matches: i===0 ? undefined : "x"};
+    });
+    // Link all subplot x-axes to the first so the range slider drives them together.
+    unitList.forEach((u,i)=>{
+      if(i>0){ layout["xaxis"+(i+1)].matches = "x"; }
+    });
+    Plotly.react("plot", traces, layout, {displayModeBar:false, responsive:true});
+  }catch(e){ console.error("plot error:", e); }
+}
+
+refresh(); loadChannels(); refreshPlot();
+document.getElementById("window").addEventListener("change", refreshPlot);
 setInterval(refresh, 3000);
 setInterval(refreshPlot, 15000);
 </script>
