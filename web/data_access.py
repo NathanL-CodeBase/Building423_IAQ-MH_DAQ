@@ -88,29 +88,30 @@ def read_span(kind, start, end):
     return df.drop(columns=["Date", "Time"], errors="ignore").reset_index(drop=True)
 
 
-def downsample(df, max_points=3000):
-    """Downsample a time-indexed frame to about max_points rows per column.
+def downsample(df, target_points=1000):
+    """Downsample a time-indexed frame to about target_points rows.
 
-    For each numeric column, buckets the span and returns the per-bucket mean.
-    Preserves overall shape without shipping every raw point. If the frame is
-    already small, returns it unchanged.
+    Buckets the frame's own time span so the result has roughly target_points
+    rows regardless of the span: a month and an hour both come back at about the
+    same size, at different bucket widths. Returns the frame unchanged when it
+    already has target_points or fewer (a narrow window at full resolution).
 
     Parameters
     ----------
     df : DataFrame
         Must have a 'dt' datetime column.
-    max_points : int
+    target_points : int
 
     Returns
     -------
     DataFrame with 'dt' and the mean of each numeric column per bucket.
     """
-    if df.empty or len(df) <= max_points:
+    if df.empty or len(df) <= target_points:
         return df
     span_s = (df["dt"].iloc[-1] - df["dt"].iloc[0]).total_seconds()
     if span_s <= 0:
         return df
-    bucket_s = max(1.0, span_s / max_points)
+    bucket_s = max(1.0, span_s / target_points)
     g = df.set_index("dt")
     numeric = g.select_dtypes("number")
     res = numeric.resample(f"{int(bucket_s)}s").mean().dropna(how="all").reset_index()

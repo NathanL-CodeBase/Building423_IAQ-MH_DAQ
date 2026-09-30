@@ -89,7 +89,6 @@ def api_snapshot():
     return JSONResponse(snap)
 
 
-@app.get("/api/trend")
 @app.get("/api/channels")
 def api_channels():
     """Return all plottable indoor channels with their SI units and groups.
@@ -107,44 +106,78 @@ def api_channels():
 
 
 @app.get("/api/trend")
-def api_trend(minutes: int = 30, channels: str = ""):
-    """Return recent SI series for selected channels, downsampled for long spans.
+def api_trend(start: str = "", end: str = "", channels: str = "", target: int = 1000):
+    """Return SI series for channels over [start, end], downsampled to ~target.
 
     Parameters
     ----------
-    minutes : int
-        Lookback window. Large values (a month is 43200) are downsampled.
+    start, end : str
+        ISO datetimes. If empty, end defaults to now and start to 30 min before.
     channels : str
         Comma-separated plain channel names. Empty returns a small default set.
+    target : int
+        Approximate number of points to return per channel. The span is bucketed
+        to hit this, so any window (a month or a minute) returns about this many.
 
     Returns
     -------
-    JSON with 'time' (ISO), one array per channel, and 'units' mapping each
-    returned channel to its SI unit, so the page can stack subplots by unit.
+    JSON: 'time' (ISO), one array per channel, 'units' per channel, and the
+    actual 'start'/'end' covered.
     """
     from src.mh_daq.scaling import si_units_by_channel
 
     unit_map = dict(si_units_by_channel(_config))
 
+    now = datetime.now()
+
+    def _parse_naive(text, default):
+        """Parse an ISO string to a tz-naive local datetime, or return default.
+
+        Accepts a trailing Z or offset and drops it, so comparisons against the
+        tz-naive file timestamps never mix aware and naive datetimes.
+        """
+        if not text:
+            return default
+        t = text.replace("Z", "")
+        try:
+            d = datetime.fromisoformat(t)
+        except ValueError:
+            return default
+        return d.replace(tzinfo=None)
+
+    e = _parse_naive(end, now)
+    s = _parse_naive(start, e - timedelta(minutes=30))
+
     default = ["T_Liv_M4_C7", "T_Gar_M5_C4", "RH_Liv_M3_C3", "6V_Test_M2_C7"]
     wanted = [c.strip() for c in channels.split(",") if c.strip()] or default
 
-    now = datetime.now()
-    start = now - timedelta(minutes=minutes)
-    df = read_span("indoor_si", start, now)
+    df = read_span("indoor_si", s, e)
     if df.empty:
-        return JSONResponse({"available": False, "time": [], "units": {}})
+        return JSONResponse(
+            {
+                "available": False,
+                "time": [],
+                "units": {},
+                "start": s.isoformat(),
+                "end": e.isoformat(),
+            }
+        )
 
-    df = downsample(df, max_points=3000)
+    df = downsample(df, target_points=max(50, min(target, 10000)))
 
-    # SI columns are named channel_unit; map plain name -> actual column.
     colmap = {}
     for want in wanted:
         match = [c for c in df.columns if c == want or c.startswith(want + "_")]
         if match:
             colmap[want] = match[0]
 
-    out = {"available": True, "time": [t.isoformat() for t in df["dt"]], "units": {}}
+    out = {
+        "available": True,
+        "time": [t.isoformat() for t in df["dt"]],
+        "units": {},
+        "start": s.isoformat(),
+        "end": e.isoformat(),
+    }
     for want, col in colmap.items():
         series = df[col].round(4).where(pd.notna(df[col]), None)
         out[want] = series.tolist()
@@ -190,14 +223,17 @@ def api_weather_download(start: str = "", end: str = "", vars: str = ""):
     CSV with a single ISO 'datetime' column plus the selected data columns.
     """
     now = datetime.now()
-    try:
-        s = datetime.fromisoformat(start) if start else datetime(now.year, now.month, now.day)
-    except ValueError:
-        s = datetime(now.year, now.month, now.day)
-    try:
-        e = datetime.fromisoformat(end) if end else now
-    except ValueError:
-        e = now
+
+    def _pn(text, default):
+        if not text:
+            return default
+        try:
+            return datetime.fromisoformat(text.replace("Z", "")).replace(tzinfo=None)
+        except ValueError:
+            return default
+
+    s = _pn(start, datetime(now.year, now.month, now.day))
+    e = _pn(end, now)
     # If end is a bare date, include the whole day.
     if end and len(end) <= 10:
         e = e + timedelta(days=1) - timedelta(seconds=1)
@@ -272,6 +308,7 @@ _PAGE = """<!doctype html>
   .picker .grp { font-size:11px; color:#9aa4b2; text-transform:uppercase;
                  letter-spacing:.04em; margin:8px 0 4px; }
   .picker label { display:inline-flex; align-items:center; gap:5px; margin:0 14px 6px 0; font-size:13px; }
+  .plot-label { font-size:12px; color:#9aa4b2; margin:10px 0 4px; }
 </style>
 </head>
 <body>
@@ -285,20 +322,23 @@ _PAGE = """<!doctype html>
   <div id="indoor-groups"></div>
   <div class="section-title">Trends</div>
   <div class="controls">
-    <label>Window
+    <label>Overview window
       <select id="window">
-        <option value="30">30 min</option>
         <option value="180">3 hours</option>
-        <option value="1440">1 day</option>
+        <option value="1440" selected>1 day</option>
         <option value="10080">1 week</option>
         <option value="43200">1 month</option>
       </select>
     </label>
     <button class="secondary" onclick="togglePicker()">Choose channels</button>
     <span id="picker-count"></span>
+    <span id="detail-label" style="font-size:12px;color:#9aa4b2;"></span>
   </div>
   <div id="picker" class="picker" style="display:none;"></div>
-  <div id="plot" style="height:520px;"></div>
+  <div class="plot-label">Overview (drag to select a detail range)</div>
+  <div id="overview" style="height:180px;"></div>
+  <div class="plot-label">Detail</div>
+  <div id="detail" style="height:420px;"></div>
 </main>
 <script>
 const UNIT = {
@@ -373,24 +413,24 @@ async function refresh(){
   } catch(e){ st.textContent = "error"; st.className="down"; }
 }
 
-let ALL_CHANNELS = [];        // [{channel, unit}]
+let ALL_CHANNELS = [];
 let SELECTED = new Set(["T_Liv_M4_C7","T_Gar_M5_C4","RH_Liv_M3_C3","6V_Test_M2_C7"]);
+let DETAIL_RANGE = null;  // [startISO, endISO] or null = follow overview
+const OVERVIEW_TARGET = 500;
+const DETAIL_TARGET = 4000;
 
 async function loadChannels(){
   try{
     const r = await fetch("/api/channels");
     const d = await r.json();
     ALL_CHANNELS = d.channels || [];
-    buildPicker();
-    updatePickerCount();
+    buildPicker(); updatePickerCount();
   }catch(e){ console.error("channels error:", e); }
 }
 
 function buildPicker(){
-  // Group picker entries by unit for readability.
   const byUnit = {};
   for(const c of ALL_CHANNELS){ (byUnit[c.unit] ||= []).push(c.channel); }
-  const box = document.getElementById("picker");
   let html = "";
   for(const unit of Object.keys(byUnit).sort()){
     html += `<div class="grp">${unit}</div>`;
@@ -399,13 +439,105 @@ function buildPicker(){
       return `<label><input type="checkbox" value="${ch}" ${on} onchange="toggleChannel('${ch}',this.checked)"> ${ch}</label>`;
     }).join("");
   }
-  box.innerHTML = html;
+  document.getElementById("picker").innerHTML = html;
 }
 
-function toggleChannel(ch, on){
+function toggleChannel(ch,on){
   if(on) SELECTED.add(ch); else SELECTED.delete(ch);
-  updatePickerCount();
-  refreshPlot();
+  updatePickerCount(); refreshOverview(); refreshDetail();
+}
+function updatePickerCount(){
+  document.getElementById("picker-count").textContent = SELECTED.size + " channel(s) selected";
+}
+function togglePicker(){
+  const p=document.getElementById("picker");
+  p.style.display = p.style.display==="none" ? "block" : "none";
+}
+function windowMinutes(){ return parseInt(document.getElementById("window").value,10); }
+// Local naive ISO (no Z, no offset), so it matches the local-time data files.
+function toLocalISO(d){
+  const p = n => String(n).padStart(2,"0");
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+"T"+
+         p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds());
+}
+function isoNow(){ return toLocalISO(new Date()); }
+function isoAgo(mins){ return toLocalISO(new Date(Date.now()-mins*60000)); }
+
+// Build stacked-by-unit traces and layout for a given data payload + div.
+function buildFigure(d){
+  const units = d.units || {};
+  const groups = {};
+  for(const ch of Object.keys(d)){
+    if(["available","time","units","start","end"].includes(ch)) continue;
+    const u = units[ch] || "";
+    (groups[u] ||= []).push(ch);
+  }
+  const unitList = Object.keys(groups).sort();
+  const n = Math.max(1, unitList.length);
+  const traces = [];
+  const layout = {
+    paper_bgcolor:"#161a22", plot_bgcolor:"#161a22", font:{color:"#c8ccd4"},
+    margin:{l:56,r:16,t:6,b:30}, showlegend:true, legend:{orientation:"h"},
+    grid:{rows:n, columns:1, pattern:"independent", roworder:"top to bottom"}
+  };
+  unitList.forEach((u,i)=>{
+    const xa=i===0?"x":"x"+(i+1), ya=i===0?"y":"y"+(i+1);
+    for(const ch of groups[u]){
+      traces.push({x:d.time, y:d[ch], name:ch, mode:"lines", xaxis:xa, yaxis:ya});
+    }
+    const xkey=i===0?"xaxis":"xaxis"+(i+1), ykey=i===0?"yaxis":"yaxis"+(i+1);
+    layout[ykey]={title:{text:u}, gridcolor:"#262b36"};
+    layout[xkey]={gridcolor:"#262b36", matches:i===0?undefined:"x"};
+  });
+  return {traces, layout};
+}
+
+async function fetchTrend(startISO, endISO, target){
+  const chans=[...SELECTED].join(",");
+  const q=new URLSearchParams({start:startISO,end:endISO,channels:chans,target:String(target)});
+  const r=await fetch("/api/trend?"+q.toString());
+  return r.json();
+}
+
+async function refreshOverview(){
+  try{
+    if(SELECTED.size===0){ Plotly.purge("overview"); return; }
+    const start=isoAgo(windowMinutes()), end=isoNow();
+    const d=await fetchTrend(start,end,OVERVIEW_TARGET);
+    if(!d.available||!d.time||d.time.length===0){ Plotly.purge("overview"); return; }
+    const {traces,layout}=buildFigure(d);
+    layout.dragmode="select";
+    Plotly.react("overview",traces,layout,{displayModeBar:false,responsive:true});
+    // Wire brush selection once per render.
+    const ov=document.getElementById("overview");
+    ov.on("plotly_selected", ev=>{
+        if(!ev || !ev.range) return;
+        // The selection range is keyed by whichever subplot x-axis was brushed
+        // (x, x2, x3, ...). All x-axes are linked, so any of them gives the same
+        // time span. Take the first x-axis key present.
+        const xkey = Object.keys(ev.range).find(k => k === "x" || /^x\d+$/.test(k));
+        if(!xkey) return;
+        const r = ev.range[xkey];
+        DETAIL_RANGE=[r[0], r[1]];
+        document.getElementById("detail-label").textContent =
+          "detail: "+String(r[0]).slice(0,19)+" to "+String(r[1]).slice(0,19);
+        refreshDetail();
+      });
+  }catch(e){ console.error("overview error:", e); }
+}
+
+async function refreshDetail(){
+  try{
+    if(SELECTED.size===0){ Plotly.purge("detail"); return; }
+    let start, end;
+    if(DETAIL_RANGE){ start=DETAIL_RANGE[0]; end=DETAIL_RANGE[1]; }
+    else { start=isoAgo(30); end=isoNow(); }  // default detail: last 30 min
+    const d=await fetchTrend(start,end,DETAIL_TARGET);
+    if(!d.available||!d.time||d.time.length===0){ Plotly.purge("detail"); return; }
+    const {traces,layout}=buildFigure(d);
+    Plotly.react("detail",traces,layout,{displayModeBar:true,responsive:true,
+      modeBarButtonsToRemove:["lasso2d","select2d"]});
+  }catch(e){ console.error("detail error:", e); }
 }
 
 function updatePickerCount(){
@@ -468,10 +600,15 @@ async function refreshPlot(){
   }catch(e){ console.error("plot error:", e); }
 }
 
-refresh(); loadChannels(); refreshPlot();
-document.getElementById("window").addEventListener("change", refreshPlot);
+refresh(); loadChannels(); refreshOverview(); refreshDetail();
+document.getElementById("window").addEventListener("change", ()=>{
+  DETAIL_RANGE=null;  // new overview window resets the detail to default
+  document.getElementById("detail-label").textContent="";
+  refreshOverview(); refreshDetail();
+});
 setInterval(refresh, 3000);
-setInterval(refreshPlot, 15000);
+// Overview and detail follow "now" when not brushed; refresh periodically.
+setInterval(()=>{ refreshOverview(); if(!DETAIL_RANGE) refreshDetail(); }, 15000);
 </script>
 </body>
 </html>
