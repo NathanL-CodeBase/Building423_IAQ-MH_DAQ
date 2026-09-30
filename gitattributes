@@ -1,0 +1,29 @@
+# Normalize line endings. Git stores text with LF and checks out with the
+# platform's native ending, which stops the "LF will be replaced by CRLF"
+# warnings on Windows without changing file contents.
+* text=auto
+
+# Explicit text files (LF in the repository).
+*.py    text
+*.md    text
+*.json  text
+*.yaml  text
+*.yml   text
+*.txt   text
+*.ini   text
+*.cfg   text
+*.toml  text
+
+# Windows batch files should keep CRLF so they run correctly.
+*.bat   text eol=crlf
+
+# Binary and large vendored assets: never touch, never diff.
+*.min.js binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.svg   binary
+*.xlsx  binary
+*.pdf   binary
+*.pyc   binary
