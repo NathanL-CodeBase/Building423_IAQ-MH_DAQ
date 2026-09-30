@@ -2,7 +2,31 @@
 
 Author: Nathan Lima (NIST)
 Created: 2026-09-25
-Status: Planning. No code written yet. First build increment is the config, scaling, validation, and simulation core with no hardware.
+Last updated: 2026-09-30
+
+## Status at a glance
+
+The full acquisition system and the web layer are built and tested in simulation (all tests passing on NISTTeleworkSys). The daemon has been validated against real hardware once, in a supervised cutover on the DAQ PC, and agreed with LabVIEW channel for channel. The system is NOT yet the system of record: LabVIEW is still running the live campaign by choice, pending a full switch during an upcoming lab-test lull.
+
+Done:
+- Config (split committed/local), scaling, offline validation tests.
+- Simulation backend, AIO 2 parser (checksum confirmed against 5 live sensor lines), outdoor serial simulator.
+- Daily writer (raw + SI + metadata sidecar + snapshot), acquisition daemon core.
+- Mission mirror (filesystem-diff, self-healing), alarm engine (dwell/clear/re-notify, frozen, dropout, real SMTP send confirmed).
+- Threading supervisor (independent indoor/outdoor/mirror/watchdog threads), COM auto-detect, heartbeat.
+- Real nidaqmx backend (validated at cutover), entry point, autostart .bat.
+- RDP status tool, cutover comparison helper.
+- Web: group live dashboard (grouped cards, weather cards, overview-plus-detail brush plot), weather public page (live plot, CSV download with variable selection and date range).
+
+Not done (remaining work, detailed in "Remaining work" below):
+- Hardware cutover to make the daemon the system of record (scheduled for the lab-test lull).
+- Retire the old Mission backup script.
+- Deploy the web layer to the dedicated web box, reading from Mission.
+- Access separation between the group-private page and the NIST-internal weather page.
+- Mission layout decision (audit who reads the old raw_data folders).
+- Weather channels in the group picker (decision).
+- Web endpoint tests.
+- Splinterware autostart once the daemon has run attended and trusted.
 
 ## Purpose
 
@@ -75,12 +99,16 @@ Group-private live dashboard built and working against sim data on NISTTeleworkS
 - Run: sim daemon in one window (`run_daq.py --sim`), dashboard in another (`python -m uvicorn web.dashboard:app --host 127.0.0.1 --port 8000`, mh_daq_web env, from repo root).
 
 Open dashboard work, next passes:
-- Channel picker for the trend plot (currently fixed 4 channels). Note: channels span very different scales (degC ~21, % ~45, V ~6, Pa ~0); picker needs unit-grouping or a secondary axis so small-range channels are not flattened.
-- Weather-only public view (NIST-internal, AIO 2 only, view plus CSV download).
-- Access separation: group-private full-data page vs NIST-internal weather page.
-- Endpoint tests once the shape settles.
-- Deploy to the web box (Windows 11 now; may move to a Linux VM via IT; uvicorn runs the same on both).
-- Vendor note: plotly.min.js is committed so the web box needs no internet.
+- DONE: outdoor simulator (`src/mh_daq/backends/sim_serial.py`), weather public page with CSV download (current day, date range, variable selection, ISO datetime), shared data-access module (`web/data_access.py`) with target-based downsampling, overview-plus-detail brush plot (overview downsampled to ~500, detail to ~4000, both target-bounded; brush works from any subplot; stacked by unit).
+- Fixed: shutdown writer-ownership race (supervisor closes shared writer after threads join; writes guarded after close). Timezone bug (web and endpoints use local naive time to match daemon's local-time file timestamps). Route collision (/api/trend had duplicate decorator).
+- Weather channels in the group picker: OPEN. Group picker is indoor-only; decide whether to add AIO 2 fields so the group plot can trend indoor and outdoor together.
+- Access separation: group-private full-data page vs NIST-internal weather page. Not yet built.
+- Endpoint tests for the web layer once shapes settle.
+- Deploy to the web box (Windows 11 now; may move to Linux VM via IT; uvicorn same on both).
+- plotly.min.js committed (4.56 MB, 2.35.3) so the web box needs no internet.
+
+## Key gotcha for deployment
+The daemon writes LOCAL-time, timezone-naive timestamps in the daily files. Every consumer (dashboard, weather page, future Mission readers) must treat times as local and naive. Do not send UTC (JS toISOString gives a Z suffix); comparing tz-aware to tz-naive raises and 500s the endpoint. The web layer now sends local naive ISO and strips any tzinfo defensively.
 
 ## Remaining before full move
 - Decide Mission layout / backup retirement (above).
@@ -184,7 +212,28 @@ Active rule for now: garage temperature above 28 C for more than 1 minute. HVAC 
 
 Package name: `mh_daq`. Test repo for now: `mh-daq-rebuild` under NathanL-CodeBase as `origin` (confirm). Later folded into `usnistgov/Building423_IAQ-MH_DAQ` as a major update, pushed as NathanL-NIST. SSH remotes only. No auto-commit or auto-push. Stage, show diff, wait.
 
-## Build order
+## Remaining work (where things left off, 2026-09-30)
+
+Everything below is NOT yet done. Ordered roughly by when it should happen.
+
+1. Mission layout decision (do before the full move). The daemon will write to `raw_data/mh_daq/YYYY/` (namespaced, mission_subdir=mh_daq, already coded). Old LabVIEW-era folders `raw_data/indoor_daq` and `raw_data/weather_station` stay until moved to `old/` or left. Homework: confirm what currently reads the old folders so nothing is orphaned when the old backup is retired. Nathan owns this; downstream projects (WUI, etc.) update themselves to read Mission and are out of this repo's scope.
+
+2. Hardware cutover (during the lab-test lull, when MH DAQ is least needed). Stop LabVIEW cDAQ VI and temp weather script; run `run_daq.py --hardware`; watch `status.py --watch` and `compare_cutover.py`; compare key channels (6V ref, RH/T, blower TCs, AIO 2) against last LabVIEW values; keep or roll back. Rollback is immediate (Ctrl+C, restart LabVIEW VI and temp script). First cutover attempt on 2026-09-28 validated the read path; not kept, by choice. Use TODAY's LabVIEW file as the baseline, not older files (Jan 2026 file had different wiring).
+
+3. Retire the old Mission backup script (explicit cutover step). The daemon's mirror replaces it: local-first write, filesystem-diff self-heal, better than the old blind folder copy. Do not run both, or the old one copies stale LabVIEW folders and misses new data.
+
+4. Deploy the web layer to the dedicated web box (Windows 11 now; may move to a Linux VM via IT; uvicorn runs the same on both). Point it at Mission: set MH_DAQ_DATA_ROOT to raw_data/mh_daq, and add a second path for the snapshot (Mission keeps snapshot in live_snapshot and dailies in raw_data/mh_daq, two roots; local sim shares one root, so a second env var is needed for Mission). plotly.min.js is committed so the box needs no internet.
+
+5. Access separation: group-private full-data page (all channels) vs NIST-internal weather page (AIO 2 only, download for people outside the IAQ&V group). Two routes on one app with different scopes is simplest; decide the auth mechanism when it is on a reachable network.
+
+6. Smaller open items:
+   - Weather channels in the group picker: currently indoor-only. Decide whether to add AIO 2 fields so the group plot can trend indoor and outdoor together.
+   - Web endpoint tests (snapshot present/absent, trend parsing, download) once shapes settle.
+   - Splinterware autostart via start_mh_daq.bat, only after the daemon has run attended and trusted for a day or two.
+   - The watts scale description in NI MAX still has a leftover self-note; harmless, clean when convenient.
+   - 6V reference battery has aged to ~5.71 V (both systems agree); swap sometime, not urgent.
+
+## Build order (all complete; kept for reference)
 
 1. Config schema and loader, plus committed template. Channel map and scales baked in from the NI MAX export. DONE, validated on NISTTeleworkSys (42 channels, 12 scales, 1 alarm rule). Delivered: `config/daq_config.json`, `config/daq_local.template.json`, `src/mh_daq/__init__.py`, `src/mh_daq/config.py`, `.gitignore`, `environment.yaml`.
 2. Scaling module (raw volts to SI, both retained). DONE, validated on NISTTeleworkSys (18 pytest cases pass). Delivered: `src/mh_daq/scaling.py`, `tests/test_scaling.py`, `pytest.ini`, and the nine-column AIO 2 schema in `config/daq_config.json`. SI endpoints proven: Setra +/-0.1 in WC maps 0-5 V to -24.88 to +24.88 Pa; Electra-Flo maps 0-10 V to 0 to 3398 m3/h; HMP155 T maps 0-10 V to -40 to +60 degC. inch WC to Pa uses 248.84 (60 degF basis).
