@@ -12,6 +12,8 @@ Created: 2026-09-28
 Update log:
     2026-09-28: Initial version. Snapshot endpoint, trend endpoint, one HTML
         page that polls and plots.
+    2026-10-01: Remove dead refreshPlot() and duplicate updatePickerCount,
+        togglePicker, and windowMinutes definitions from the group page script.
 
 Usage (from repo root, mh_daq_web env):
     # Local sim output (default): reads config.local.local_data_dir
@@ -62,6 +64,10 @@ def _snapshot_path():
     return _data_root() / "latest_snapshot.json"
 
 
+def _heartbeat_path():
+    return _data_root() / "heartbeat.json"
+
+
 def _si_file_for(date):
     name = _config.local.file_naming["indoor_si"].format(date=date.strftime("%Y%m%d"))
     return _data_root() / date.strftime("%Y") / name
@@ -87,6 +93,30 @@ def api_snapshot():
     except (TypeError, ValueError):
         snap["age_s"] = None
     return JSONResponse(snap)
+
+
+@app.get("/api/heartbeat")
+def api_heartbeat():
+    """Return the daemon heartbeat with an age, or available=false if missing.
+
+    The heartbeat holds system status only (thread liveness, alarm state,
+    Mission reachability, record timestamps), no indoor measurement values. The
+    group page reads it to drive the health indicator. age_s is seconds since
+    written_at, so the page can flag a stale or dead daemon.
+    """
+    p = _heartbeat_path()
+    try:
+        with open(p, encoding="utf-8") as f:
+            hb = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return JSONResponse({"available": False, "reason": f"No heartbeat at {p}"}, status_code=200)
+    hb["available"] = True
+    try:
+        ts = datetime.fromisoformat(hb.get("written_at"))
+        hb["age_s"] = (datetime.now() - ts).total_seconds()
+    except (TypeError, ValueError):
+        hb["age_s"] = None
+    return JSONResponse(hb)
 
 
 @app.get("/api/channels")
@@ -200,11 +230,29 @@ def api_weather_series(hours: int = 24):
     df = read_span("outdoor", start, now)
     if df.empty:
         return JSONResponse({"available": False, "time": []})
-    df = downsample(df, max_points=3000)
+    df = downsample(df, target_points=3000)
     out = {"available": True, "time": [t.isoformat() for t in df["dt"]]}
     for c in numeric_columns(df):
         out[c] = df[c].round(3).where(pd.notna(df[c]), None).tolist()
     return JSONResponse(out)
+
+
+@app.get("/api/weather/health")
+def api_weather_health():
+    """Return outdoor-feed freshness only: {available, age_s}.
+
+    Drives the public weather page indicator. Reads the last 10 minutes of
+    outdoor data and reports the age of the most recent record. Does not read
+    the heartbeat or any indoor data, so no system internals reach the public
+    page. age_s is null when no recent record exists.
+    """
+    now = datetime.now()
+    df = read_span("outdoor", now - timedelta(minutes=10), now)
+    if df.empty:
+        return JSONResponse({"available": False, "age_s": None})
+    last_dt = df["dt"].max()
+    age_s = (now - last_dt).total_seconds()
+    return JSONResponse({"available": True, "age_s": age_s})
 
 
 @app.get("/api/weather/download")
@@ -273,7 +321,7 @@ def index():
     return HTMLResponse(_PAGE)
 
 
-_PAGE = """<!doctype html>
+_PAGE = r"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -288,6 +336,7 @@ _PAGE = """<!doctype html>
   #status { font-size: 13px; color: #9aa4b2; }
   #status.stale { color: #e0a030; }
   #status.down { color: #e05050; }
+  #status.ok { color: #40b060; }
   main { padding: 16px 20px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
           gap: 10px; margin-bottom: 20px; }
@@ -345,6 +394,12 @@ const UNIT = {
   "6V_Test_M2_C7":"V","cfm_return_duct_M2_C1":"m3/h","watts_blowermtr_M2_C2":"W",
   "T_blowermtr1_M6_C0":"degC","T_blowermtr2_M6_C1":"degC"
 };
+// Group-page health thresholds, in seconds. Correct for near-real-time LOCAL
+// reads. RAISE THESE at Mission deployment (reads lag the snapshot/mirror
+// cadence, up to 60 s): green to about 90 s, down to about 300 s, or the light
+// reads yellow then red constantly. See doc/mh-daq-plan.md.
+const HEALTH_DELAYED_S = 5;
+const HEALTH_DOWN_S = 60;
 function unitFor(k){
   if (k in UNIT) return UNIT[k];
   if (k.startsWith("T_")) return "degC";
@@ -411,6 +466,44 @@ async function refresh(){
     }
     document.getElementById("indoor-groups").innerHTML = html;
   } catch(e){ st.textContent = "error"; st.className="down"; }
+}
+
+// Drive the header indicator from the heartbeat. Worst applicable condition
+// wins: red beats yellow beats green. The heartbeat holds status only, so this
+// reads no measurement values. #status is owned here, not by refresh().
+async function refreshHealth(){
+  const st = document.getElementById("status");
+  try{
+    const r = await fetch("/api/heartbeat");
+    const h = await r.json();
+
+    // Red: no heartbeat at all, or so old the daemon is presumed dead.
+    if(!h.available){ st.textContent = "System down (no heartbeat)"; st.className="down"; return; }
+    const age = h.age_s==null ? null : Math.round(h.age_s);
+    if(h.age_s==null || h.age_s > HEALTH_DOWN_S){
+      st.textContent = "System down" + (age==null ? "" : " ("+age+"s)");
+      st.className="down"; return;
+    }
+
+    // Red: a worker thread has died, or acquisition dropped out.
+    const threads = h.threads_alive || {};
+    const dead = Object.keys(threads).find(k => !threads[k]);
+    if(dead){ st.textContent = "Thread down: "+dead; st.className="down"; return; }
+    const alarms = h.alarms || {};
+    if(alarms.dropout){ st.textContent = "Acquisition dropout"; st.className="down"; return; }
+
+    // Yellow: delayed, Mission unreachable, or an alarm/freeze is active.
+    if(h.age_s > HEALTH_DELAYED_S){ st.textContent = "Delayed ("+age+"s)"; st.className="stale"; return; }
+    if(h.mission_available===false){ st.textContent = "Mission unreachable"; st.className="stale"; return; }
+    const tripped = alarms.tripped_rules || [];
+    if(tripped.length){ st.textContent = "Alarm: "+tripped.join(", "); st.className="stale"; return; }
+    const frozen = alarms.frozen_channels || [];
+    if(frozen.length){ st.textContent = "Frozen: "+frozen.join(", "); st.className="stale"; return; }
+
+    // Green.
+    st.textContent = "System OK · updated "+age+"s ago";
+    st.className="ok";
+  }catch(e){ st.textContent = "System down (error)"; st.className="down"; }
 }
 
 let ALL_CHANNELS = [];
@@ -540,80 +633,21 @@ async function refreshDetail(){
   }catch(e){ console.error("detail error:", e); }
 }
 
-function updatePickerCount(){
-  document.getElementById("picker-count").textContent =
-    SELECTED.size + " channel(s) selected";
-}
-
-function togglePicker(){
-  const p = document.getElementById("picker");
-  p.style.display = p.style.display==="none" ? "block" : "none";
-}
-
-function windowMinutes(){ return parseInt(document.getElementById("window").value,10); }
-
-async function refreshPlot(){
-  try{
-    if(SELECTED.size===0){ Plotly.purge("plot"); return; }
-    const chans = [...SELECTED].join(",");
-    const mins = windowMinutes();
-    const r = await fetch(`/api/trend?minutes=${mins}&channels=${encodeURIComponent(chans)}`);
-    const d = await r.json();
-    if(!d.available || !d.time || d.time.length===0){
-      Plotly.purge("plot"); return;
-    }
-    // Group selected channels by unit -> one subplot row per unit.
-    const units = d.units || {};
-    const groups = {};
-    for(const ch of Object.keys(d)){
-      if(ch==="available"||ch==="time"||ch==="units") continue;
-      const u = units[ch] || "";
-      (groups[u] ||= []).push(ch);
-    }
-    const unitList = Object.keys(groups).sort();
-    const n = unitList.length;
-    const traces = [];
-    const layout = {
-      paper_bgcolor:"#161a22", plot_bgcolor:"#161a22", font:{color:"#c8ccd4"},
-      margin:{l:56,r:16,t:10,b:40}, showlegend:true, legend:{orientation:"h"},
-      grid:{rows:n, columns:1, pattern:"independent", roworder:"top to bottom"}
-    };
-    unitList.forEach((u,i)=>{
-      const xa = i===0 ? "x" : "x"+(i+1);
-      const ya = i===0 ? "y" : "y"+(i+1);
-      for(const ch of groups[u]){
-        traces.push({x:d.time, y:d[ch], name:ch, mode:"lines",
-                     xaxis:xa, yaxis:ya});
-      }
-      const xkey = i===0 ? "xaxis" : "xaxis"+(i+1);
-      const ykey = i===0 ? "yaxis" : "yaxis"+(i+1);
-      layout[ykey] = {title:{text:u}, gridcolor:"#262b36"};
-      layout[xkey] = {gridcolor:"#262b36",
-        rangeslider: i===(n-1) ? {visible:true, thickness:0.06} : {visible:false},
-        matches: i===0 ? undefined : "x"};
-    });
-    // Link all subplot x-axes to the first so the range slider drives them together.
-    unitList.forEach((u,i)=>{
-      if(i>0){ layout["xaxis"+(i+1)].matches = "x"; }
-    });
-    Plotly.react("plot", traces, layout, {displayModeBar:false, responsive:true});
-  }catch(e){ console.error("plot error:", e); }
-}
-
-refresh(); loadChannels(); refreshOverview(); refreshDetail();
+refresh(); refreshHealth(); loadChannels(); refreshOverview(); refreshDetail();
 document.getElementById("window").addEventListener("change", ()=>{
   DETAIL_RANGE=null;  // new overview window resets the detail to default
   document.getElementById("detail-label").textContent="";
   refreshOverview(); refreshDetail();
 });
 setInterval(refresh, 3000);
+setInterval(refreshHealth, 3000);
 // Overview and detail follow "now" when not brushed; refresh periodically.
 setInterval(()=>{ refreshOverview(); if(!DETAIL_RANGE) refreshDetail(); }, 15000);
 </script>
 </body>
 </html>
 """
-_WEATHER_PAGE = """<!doctype html>
+_WEATHER_PAGE = r"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
