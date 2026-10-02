@@ -200,7 +200,7 @@ def api_weather_series(hours: int = 24):
     df = read_span("outdoor", start, now)
     if df.empty:
         return JSONResponse({"available": False, "time": []})
-    df = downsample(df, max_points=3000)
+    df = downsample(df, target_points=3000)
     out = {"available": True, "time": [t.isoformat() for t in df["dt"]]}
     for c in numeric_columns(df):
         out[c] = df[c].round(3).where(pd.notna(df[c]), None).tolist()
@@ -508,8 +508,10 @@ async function refreshOverview(){
     const {traces,layout}=buildFigure(d);
     layout.dragmode="select";
     Plotly.react("overview",traces,layout,{displayModeBar:false,responsive:true});
-    // Wire brush selection once per render.
+    // Plotly.react keeps listeners across renders, so clear before re-wiring;
+    // otherwise each 15 s refresh stacks another handler on the brush.
     const ov=document.getElementById("overview");
+    ov.removeAllListeners("plotly_selected");
     ov.on("plotly_selected", ev=>{
         if(!ev || !ev.range) return;
         // The selection range is keyed by whichever subplot x-axis was brushed
@@ -693,7 +695,12 @@ function selectedVars(){
   return [...document.querySelectorAll('#vars input:checked')].map(el=>el.value);
 }
 
-function isoDate(d){ return d.toISOString().slice(0,10); }
+// Local calendar date. toISOString() is UTC, which rolls to tomorrow in the
+// evening for US time zones and would request an empty day.
+function isoDate(d){
+  const p = n => String(n).padStart(2,"0");
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate());
+}
 
 function doDownload(start, end){
   const vars = selectedVars().join(",");

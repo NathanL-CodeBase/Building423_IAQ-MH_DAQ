@@ -38,7 +38,6 @@ _KEY_CHANNELS = [
     ("T_blowermtr1_M6_C0", "Blower TC1 (degC)"),
     ("T_blowermtr2_M6_C1", "Blower TC2 (degC)"),
 ]
-]
 
 
 def _age_s(iso_str):
