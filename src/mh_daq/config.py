@@ -13,9 +13,11 @@ Update log:
         parse, and validation of scale and alarm references.
     2026-10-02: Remove unused local_machine_name helper. Note that
         retention_days is parsed but not yet enforced.
+    2026-10-02: Honor MH_DAQ_CONFIG_DIR, so tests use a temporary config.
 """
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -194,12 +196,16 @@ def _find_file(name, search_dirs):
 def _default_search_dirs(config_dir):
     """Directories to search for config, in priority order.
 
-    An explicit config_dir wins. Otherwise search the current working
-    directory, then a `config/` folder beside it, then the packaged repo
-    `config/` folder two levels up from this module.
+    An explicit config_dir wins, then the MH_DAQ_CONFIG_DIR environment
+    variable (the test suite sets it to a temporary config). Otherwise search
+    the current working directory, then a `config/` folder beside it, then the
+    packaged repo `config/` folder two levels up from this module.
     """
     if config_dir is not None:
         return [Path(config_dir)]
+    override = os.environ.get("MH_DAQ_CONFIG_DIR")
+    if override:
+        return [Path(override)]
     here = Path(__file__).resolve()
     repo_config = here.parent.parent.parent / "config"
     return [Path.cwd(), Path.cwd() / "config", repo_config]
