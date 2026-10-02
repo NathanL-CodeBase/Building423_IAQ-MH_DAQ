@@ -14,6 +14,7 @@ Update log:
     2026-10-02: Remove unused local_machine_name helper. Note that
         retention_days is parsed but not yet enforced.
     2026-10-02: Honor MH_DAQ_CONFIG_DIR, so tests use a temporary config.
+    2026-10-02: Parse and validate display_ranges (dashboard card colors).
 """
 
 import json
@@ -105,6 +106,21 @@ class AlarmRule:
     low: Optional[float] = None
 
 
+@dataclass(frozen=True)
+class DisplayRange:
+    """Normal band for dashboard card colors. Display only, not an alarm.
+
+    A value below low shows blue, above high shows red. Either limit may be
+    None to leave that side uncolored.
+    """
+
+    name: str
+    unit: str
+    channels: tuple
+    low: Optional[float] = None
+    high: Optional[float] = None
+
+
 @dataclass
 class QualityConfig:
     dropout_s: float
@@ -162,6 +178,7 @@ class SystemConfig:
     alarm_rules: list
     mirror: MirrorConfig
     local: LocalConfig
+    display_ranges: list = field(default_factory=list)  # DisplayRange
 
     def channel_names(self):
         """Return channel names in acquisition (task) order."""
@@ -338,6 +355,20 @@ def _parse(committed, local):
         for r in committed["alarms"]["rules"]
     ]
 
+    def _opt_float(v):
+        return None if v is None else float(v)
+
+    display_ranges = [
+        DisplayRange(
+            name=r["name"],
+            unit=r["unit"],
+            channels=tuple(r["channels"]),
+            low=_opt_float(r.get("low")),
+            high=_opt_float(r.get("high")),
+        )
+        for r in committed.get("display_ranges", {}).get("rules", [])
+    ]
+
     acq = committed["acquisition"]
     acquisition = AcquisitionConfig(
         oversample_rate_hz=int(acq["oversample_rate_hz"]),
@@ -385,6 +416,7 @@ def _parse(committed, local):
         alarm_rules=rules,
         mirror=mirror,
         local=local_cfg,
+        display_ranges=display_ranges,
     )
 
 
@@ -417,6 +449,8 @@ def _validate(cfg):
         if r.high is None and r.low is None:
             problems.append(f"Alarm rule '{r.description}' sets neither high nor low.")
 
+    problems += _display_range_problems(cfg, valid_channels)
+
     if "REPLACE" in cfg.local.machine_name.upper():
         problems.append("machine_name in daq_local.json is still a placeholder.")
     if "REPLACE" in cfg.local.smtp_from.upper():
@@ -426,3 +460,39 @@ def _validate(cfg):
 
     if problems:
         raise ConfigError("Config validation failed:\n  - " + "\n  - ".join(problems))
+
+
+def _display_range_problems(cfg, valid_channels):
+    """Return validation messages for the display_ranges rules.
+
+    Units are checked against each channel's SI unit so a range written in the
+    wrong unit (for example degF limits on a degC channel) fails at startup.
+    A channel may sit in only one rule, since a card shows one color.
+    """
+    # Imported here because scaling imports this module.
+    from .scaling import si_unit_for_channel
+
+    by_name = {c.name: c for c in cfg.channels}
+    problems = []
+    seen = {}
+    for dr in cfg.display_ranges:
+        if dr.low is None and dr.high is None:
+            problems.append(f"Display range '{dr.name}' sets neither low nor high.")
+        if dr.low is not None and dr.high is not None and dr.low >= dr.high:
+            problems.append(f"Display range '{dr.name}' has low {dr.low} not below high {dr.high}.")
+        for ch in dr.channels:
+            if ch not in valid_channels:
+                problems.append(f"Display range '{dr.name}' targets unknown channel '{ch}'.")
+                continue
+            unit = si_unit_for_channel(by_name[ch], cfg)
+            if unit != dr.unit:
+                problems.append(
+                    f"Display range '{dr.name}' unit '{dr.unit}' does not match "
+                    f"channel '{ch}' SI unit '{unit}'."
+                )
+            if ch in seen:
+                problems.append(
+                    f"Channel '{ch}' is in display ranges '{seen[ch]}' and '{dr.name}'."
+                )
+            seen[ch] = dr.name
+    return problems

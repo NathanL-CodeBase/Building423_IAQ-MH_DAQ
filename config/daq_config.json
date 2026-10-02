@@ -183,5 +183,30 @@
         "unit": "degC"
       }
     ]
+  },
+  "display_ranges": {
+    "notes": "Group dashboard value-card colors only; these are not alarms and send no email. A value below low shows blue, above high shows red, and a value equal to a limit shows normal. Comparison uses the value as displayed (2 decimals). Living-space zones only: garage, attic, outdoor, HVAC supply, and blower channels are left uncolored.",
+    "rules": [
+      {
+        "name": "Living-space temperature",
+        "unit": "degC",
+        "low": 18.0,
+        "high": 25.0,
+        "channels": [
+          "T_Bed1_M4_C4", "T_Bed2_M4_C5", "T_Bed3_M4_C6", "T_Liv_M4_C7",
+          "T_Fam_M5_C0", "T_MBa_M5_C1", "T_Ba1_M5_C2", "T_UR_M5_C3"
+        ]
+      },
+      {
+        "name": "Living-space relative humidity",
+        "unit": "percent",
+        "low": 40.0,
+        "high": 60.0,
+        "channels": [
+          "RH_Bed1_M3_C0", "RH_Bed2_M3_C1", "RH_Bed3_M3_C2", "RH_Liv_M3_C3",
+          "RH_Fam_M3_C4", "RH_MBa_M3_C5", "RH_Ba1_M3_C6", "RH_UR_M3_C7"
+        ]
+      }
+    ]
   }
 }

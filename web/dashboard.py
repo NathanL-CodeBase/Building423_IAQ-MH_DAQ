@@ -18,6 +18,8 @@ Update log:
         Serve units and default trend channels from /api/channels so the page
         holds no copy of config. Leave #status to the heartbeat indicator.
         Move page HTML and JS to web/static/ (index.*, weather.*).
+    2026-10-02: Serve display_ranges from config through /api/channels for
+        the living-space T and RH card colors.
 
 Usage (from repo root, mh_daq_web env):
     # Local sim output (default): reads config.local.local_data_dir
@@ -53,6 +55,9 @@ app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 
 _config = load_config()
 _UNITS = dict(si_units_by_channel(_config))
+_DISPLAY_RANGES = {
+    ch: {"low": dr.low, "high": dr.high} for dr in _config.display_ranges for ch in dr.channels
+}
 
 # Trend channels shown before the user picks any. Served to the page through
 # /api/channels so the page and the API share one list.
@@ -115,13 +120,22 @@ def api_heartbeat():
 
 @app.get("/api/channels")
 def api_channels():
-    """Return all indoor channels with SI units, plus the default trend set.
+    """Return all indoor channels with SI units, the default trend set, and
+    the card color ranges.
 
-    Used to build the picker and to label the cards. Units come from the
-    config scales, in task order.
+    Used to build the picker and to label and color the cards. Units come
+    from the config scales, in task order. display_ranges maps a channel name
+    to {"low", "high"} (either may be null); channels without a range are
+    absent.
     """
     items = [{"channel": name, "unit": unit} for name, unit in _UNITS.items()]
-    return JSONResponse({"channels": items, "defaults": _DEFAULT_TREND_CHANNELS})
+    return JSONResponse(
+        {
+            "channels": items,
+            "defaults": _DEFAULT_TREND_CHANNELS,
+            "display_ranges": _DISPLAY_RANGES,
+        }
+    )
 
 
 @app.get("/api/trend")

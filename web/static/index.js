@@ -13,6 +13,21 @@ function unitFor(k){
   return u === "percent" ? "%" : u;
 }
 
+// Channel name to {low, high}, filled from /api/channels (daq_config.json
+// display_ranges). Channels without a range are never colored.
+let RANGES = {};
+// Class for a card value: "below", "above", or "" inside the band. Compares the
+// displayed (2-decimal) value, so 39.996 shown as 40.00 is not colored. Limits
+// themselves count as normal.
+function rangeClass(k, shown){
+  const r = RANGES[k];
+  const n = Number(shown);
+  if (!r || !Number.isFinite(n)) return "";
+  if (r.low != null && n < r.low) return "below";
+  if (r.high != null && n > r.high) return "above";
+  return "";
+}
+
 // Group indoor channels into sections by name pattern, in display order.
 // A channel matches the first group whose test returns true.
 const GROUPS = [
@@ -67,7 +82,7 @@ async function refresh(){
       html += keys.map(k=>{
         const v = si[k]; const val = (typeof v==="number") ? v.toFixed(2) : v;
         return `<div class="card"><div class="label">${k}</div>`+
-          `<div class="value">${val}<span class="unit">${unitFor(k)}</span></div></div>`;
+          `<div class="value ${rangeClass(k, val)}">${val}<span class="unit">${unitFor(k)}</span></div></div>`;
       }).join("");
       html += `</div>`;
     }
@@ -125,6 +140,7 @@ async function loadChannels(){
     const d = await r.json();
     ALL_CHANNELS = d.channels || [];
     UNITS = Object.fromEntries(ALL_CHANNELS.map(c => [c.channel, c.unit]));
+    RANGES = d.display_ranges || {};
     SELECTED = new Set(d.defaults || []);
     buildPicker(); updatePickerCount();
   }catch(e){ console.error("channels error:", e); }
