@@ -12,7 +12,7 @@ The acquisition daemon and the web layer are complete and tested in simulation. 
 
 - `src/mh_daq/` reusable modules: config loading and validation, voltage-to-SI scaling, the AIO 2 serial parser, the daily file writer, the acquisition daemon, the Mission mirror, the alarm engine, the threading supervisor, and the acquisition backends (`backends/`: shared interface, simulation, NI-DAQmx, and a simulated AIO 2 serial source).
 - `config/` the committed channel map and scales (`daq_config.json`) and a template for the machine-specific local config (`daq_local.template.json`).
-- `web/` the FastAPI dashboard (`dashboard.py`), shared data access and downsampling (`data_access.py`), and vendored front-end assets (`static/`).
+- `web/` the FastAPI dashboard (`dashboard.py`), shared data access and downsampling (`data_access.py`), and front-end files (`static/`: the group page `index.html`/`index.js`, the weather page `weather.html`/`weather.js`, and vendored Plotly).
 - `tests/` the pytest suite (config, scaling, parser, writer, daemon, mirror, alarms, supervisor).
 - `run_daq.py` entry point for the acquisition daemon (`--sim` or `--hardware`).
 - `status.py` a read-only status view for confirming a running daemon over Remote Desktop.
