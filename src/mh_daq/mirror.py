@@ -169,13 +169,21 @@ class MissionMirror:
         return copied
 
     def sync_snapshot(self):
-        """Copy the latest snapshot to the Mission snapshot dir. Returns bool."""
+        """Copy the snapshot and heartbeat to the Mission snapshot dir.
+
+        Both are small status files the web layer reads; mirroring them lets the
+        web box judge system health without touching the DAQ PC. Returns True if
+        the snapshot was copied.
+        """
+        copied = False
         src = self._local / "latest_snapshot.json"
-        if not src.exists():
-            return False
-        dst = self._mission_snap / "latest_snapshot.json"
-        self._copy_atomic(src, dst)
-        return True
+        if src.exists():
+            self._copy_atomic(src, self._mission_snap / "latest_snapshot.json")
+            copied = True
+        hb = self._local / "heartbeat.json"
+        if hb.exists():
+            self._copy_atomic(hb, self._mission_snap / "heartbeat.json")
+        return copied
 
     def tick(self, now=None):
         """Run one mirror pass. Never raises; logs and returns on failure.
