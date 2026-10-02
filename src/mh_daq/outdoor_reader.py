@@ -14,6 +14,9 @@ Update log:
     2026-09-25: Initial version. Threaded read loop with malformed-line
         throttling and independent reconnect, mirroring the resilience of the
         temp weather script.
+    2026-10-02: Add set_publish so the supervisor wires the publish callback
+        without touching a private attribute. Add LatestFields, a locked
+        holder for the latest outdoor fields shared across threads.
 """
 
 import logging
@@ -26,6 +29,26 @@ from .aio2 import Aio2ParseError, parse_line
 logger = logging.getLogger("mh_daq.outdoor")
 
 _MALFORMED_LOG_INTERVAL_S = 60
+
+
+class LatestFields:
+    """Thread-safe holder for the most recent parsed outdoor fields.
+
+    The outdoor thread calls set; the indoor loop and heartbeat call get. Both
+    sides work on copies, so neither sees the other's dict mid-update.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._fields = {}
+
+    def set(self, fields):
+        with self._lock:
+            self._fields = dict(fields)
+
+    def get(self):
+        with self._lock:
+            return dict(self._fields)
 
 
 class OutdoorReader:
@@ -52,6 +75,10 @@ class OutdoorReader:
         self._publish = publish or (lambda fields: None)
         self._stop = threading.Event()
         self._reconnect_wait_s = 5.0
+
+    def set_publish(self, publish):
+        """Set the callable that receives each valid line's parsed fields."""
+        self._publish = publish
 
     def run_loop(self):
         """Read, parse, write, and publish until stopped. Reconnects on error."""

@@ -14,6 +14,10 @@ Created: 2026-09-25
 Update log:
     2026-09-25: Initial version. Thread orchestration, shared outdoor value,
         alarm hook on the indoor cycle, and a watchdog thread.
+    2026-10-02: Wire components through their public hooks instead of
+        patching private attributes. Outdoor values pass through a locked
+        LatestFields holder. Heartbeat reads the mirror's last reachability
+        result instead of probing Mission every second.
 """
 
 import json
@@ -23,6 +27,8 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
+
+from .outdoor_reader import LatestFields
 
 logger = logging.getLogger("mh_daq.supervisor")
 
@@ -34,9 +40,10 @@ class Supervisor:
     ----------
     config : SystemConfig
     indoor_daemon : AcquisitionDaemon
-        Its run_once is wrapped so each cycle also runs alarms and injects the
-        latest outdoor values into the snapshot.
+        Given the alarm engine and the latest-outdoor provider, so each cycle
+        runs alarms and writes current outdoor values into the snapshot.
     outdoor_reader : OutdoorReader
+        Given a publish callback that feeds the latest-outdoor holder.
     mirror : MissionMirror
     alarms : AlarmEngine
     """
@@ -49,48 +56,29 @@ class Supervisor:
         self._alarms = alarms
         self._stop = threading.Event()
         self._threads = []
-        self._latest_outdoor = {}
-        self._outdoor_lock = threading.Lock()
+        self._latest_outdoor = LatestFields()
         self._started_at = None
-        self._last_indoor_ts = None
         self._hb_path = Path(config.local.local_data_dir) / "heartbeat.json"
 
-        # Wire shared state: outdoor reader publishes here, indoor loop reads it.
-        self._outdoor._publish = self._set_latest_outdoor
-        self._indoor._latest_outdoor = {}  # replaced per-cycle via the wrapper
-
-        # Wrap the indoor cycle to add alarms and current outdoor values.
-        self._indoor_run_once = self._indoor.run_once
-        self._indoor.run_once = self._indoor_cycle
-
-    def _set_latest_outdoor(self, fields):
-        with self._outdoor_lock:
-            self._latest_outdoor = dict(fields)
-
-    def _indoor_cycle(self):
-        """One indoor cycle plus alarms, with current outdoor values in view."""
-        with self._outdoor_lock:
-            self._indoor._latest_outdoor = dict(self._latest_outdoor)
-        si = self._indoor_run_once()
-        now = datetime.now()
-        self._last_indoor_ts = now
-        events = self._alarms.check(si, now)
-        for e in events:
-            logger.info("Indoor alarm event: %s", e)
-        return si
+        # Outdoor thread publishes into the holder; the indoor loop reads it.
+        self._outdoor.set_publish(self._latest_outdoor.set)
+        self._indoor.set_outdoor_provider(self._latest_outdoor.get)
+        self._indoor.set_alarms(self._alarms)
 
     def _write_heartbeat(self):
         """Write a small liveness file atomically. Never raises."""
+        last_indoor = self._indoor.last_record_time
         hb = {
             "written_at": datetime.now().isoformat(timespec="seconds"),
             "started_at": (
                 self._started_at.isoformat(timespec="seconds") if self._started_at else None
             ),
             "last_indoor_record": (
-                self._last_indoor_ts.isoformat(timespec="seconds") if self._last_indoor_ts else None
+                last_indoor.isoformat(timespec="seconds") if last_indoor else None
             ),
-            "latest_outdoor_wind_speed": self._latest_outdoor.get("wind_speed"),
-            "mission_available": self._mirror.mission_available(),
+            "latest_outdoor_wind_speed": self._latest_outdoor.get().get("wind_speed"),
+            # None until the mirror's first tick finishes its reachability check.
+            "mission_available": self._mirror.last_available,
             "alarms": self._alarms.current_state(),
             "threads_alive": {t.name: t.is_alive() for t in self._threads},
         }
@@ -142,7 +130,7 @@ class Supervisor:
             t.join(timeout=10.0)
         # Close the shared writer last, after all writing threads have stopped.
         try:
-            self._indoor._writer.close()
+            self._indoor.writer.close()
         except Exception:
             pass
         logger.info("Supervisor stopped.")

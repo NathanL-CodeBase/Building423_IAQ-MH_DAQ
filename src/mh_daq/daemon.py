@@ -4,15 +4,19 @@
 Acquisition daemon core for the MH DAQ system.
 
 Purpose: Drive one acquisition cycle per record interval: read a raw record
-    from the backend, scale it to SI, write indoor raw and SI rows, and update
-    the snapshot. Outdoor (AIO 2) acquisition runs on its own path and is wired
-    in a later step; the core here focuses on the cDAQ loop and a clean,
-    testable single-cycle method so timing and I/O are separable from logic.
+    from the backend, scale it to SI, write indoor raw and SI rows, run the
+    alarm checks, and update the snapshot. Outdoor (AIO 2) acquisition runs on
+    its own thread; its latest values arrive through an outdoor provider
+    callable. A testable single-cycle method keeps timing and I/O separable
+    from logic.
 Author: Nathan Lima
 Created: 2026-09-25
 Update log:
     2026-09-25: Initial version. run_once for a single cycle (used by tests),
         and run_loop with a monotonic-clock pace and graceful stop.
+    2026-10-02: Run alarms inside run_once so the snapshot carries the
+        current alarm state. Public hooks (set_outdoor_provider, set_alarms,
+        writer, last_record_time) replace the supervisor's private patching.
 """
 
 import logging
@@ -35,25 +39,55 @@ class AcquisitionDaemon:
         Already-constructed backend (simulation or nidaqmx). The daemon opens
         and closes it.
     writer : DailyWriter
+    outdoor_provider : callable, optional
+        Returns the latest outdoor fields dict for the snapshot. Defaults to an
+        empty dict, for indoor-only runs and tests.
+    alarms : AlarmEngine, optional
+        Checked once per record. Omit to skip alarms.
     """
 
-    def __init__(self, config, backend, writer):
+    def __init__(self, config, backend, writer, outdoor_provider=None, alarms=None):
         self._config = config
         self._backend = backend
         self._writer = writer
+        self._outdoor_provider = outdoor_provider or dict
+        self._alarms = alarms
         self._stop = threading.Event()
-        self._latest_outdoor = {}  # updated by the outdoor path when wired in
+        self.last_record_time = None
+
+    @property
+    def writer(self):
+        """The DailyWriter this daemon writes to (shared with the outdoor path)."""
+        return self._writer
+
+    def set_outdoor_provider(self, provider):
+        """Set the callable that returns the latest outdoor fields."""
+        self._outdoor_provider = provider
+
+    def set_alarms(self, alarms):
+        """Set the AlarmEngine checked on each record."""
+        self._alarms = alarms
 
     def run_once(self):
         """Run one acquisition cycle. Returns the SI values written.
 
-        Reads a raw record, scales it, writes indoor rows, and updates the
-        snapshot. Kept separate from timing so tests can drive single cycles.
+        Reads a raw record, scales it, writes indoor rows, runs alarms, and
+        updates the snapshot. Alarms run before the snapshot write so the
+        snapshot reports the state that includes this record. Kept separate
+        from timing so tests can drive single cycles.
         """
         rec = self._backend.read_record()
         si = scale_record(rec.values, self._config)
         self._writer.write_indoor(rec.timestamp, rec.values, si)
-        self._writer.write_snapshot(rec.timestamp, si, self._latest_outdoor)
+
+        alarm_state = None
+        if self._alarms is not None:
+            for event in self._alarms.check(si, rec.timestamp):
+                logger.info("Indoor alarm event: %s", event)
+            alarm_state = self._alarms.current_state()
+
+        self._writer.write_snapshot(rec.timestamp, si, self._outdoor_provider(), alarm_state)
+        self.last_record_time = rec.timestamp
         return si
 
     def run_loop(self):

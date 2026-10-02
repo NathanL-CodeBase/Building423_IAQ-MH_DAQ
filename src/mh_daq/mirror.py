@@ -15,6 +15,8 @@ Created: 2026-09-25
 Update log:
     2026-09-25: Initial version. Filesystem-diff sync (no in-memory queue),
         atomic copy via temp file plus replace on the destination.
+    2026-10-02: Record each tick's reachability in last_available, so the
+        heartbeat reports it without probing the share itself.
 """
 
 import logging
@@ -54,6 +56,10 @@ class MissionMirror:
         self._stop = threading.Event()
         self._last_snap = 0.0
         self._last_inprogress = 0.0
+        # Result of the most recent tick's reachability check; None before the
+        # first tick. Read by the heartbeat, because probing a dead UNC share
+        # can block for tens of seconds on Windows.
+        self.last_available = None
 
     def mission_available(self):
         """Return True if the Mission data root is reachable.
@@ -192,7 +198,8 @@ class MissionMirror:
         files and the snapshot sync on their intervals.
         """
         now = now or datetime.now()
-        if not self.mission_available():
+        self.last_available = self.mission_available()
+        if not self.last_available:
             logger.warning("Mission unavailable; will retry.")
             return
         try:

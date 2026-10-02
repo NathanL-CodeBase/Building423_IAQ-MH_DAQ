@@ -12,15 +12,14 @@ Created: 2026-09-29
 Update log:
     2026-09-29: Initial version. One line per readline call at ~1 Hz, with
         slow drift on wind, temperature, RH, and pressure.
+    2026-10-02: Remove unused imports.
 """
 
 import math
 import random
 import time
-from datetime import datetime
 
 from ..serial_source import LineSource
-from .base import BackendError  # noqa: F401  (kept for parity; not required)
 
 
 def _checksum(body):

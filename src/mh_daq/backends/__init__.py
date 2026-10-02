@@ -12,11 +12,8 @@ from .simulation import SimulationBackend
 # without the driver (the simulator path stays usable).
 try:
     from .nidaqmx_backend import NiDaqmxBackend
-
-    _HAS_NIDAQMX = True
 except Exception:  # noqa: BLE001
     NiDaqmxBackend = None
-    _HAS_NIDAQMX = False
 
 __all__ = [
     "AcquisitionBackend",

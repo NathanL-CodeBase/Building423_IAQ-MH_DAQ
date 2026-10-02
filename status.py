@@ -12,6 +12,8 @@ Author: Nathan Lima
 Created: 2026-09-25
 Update log:
     2026-09-25: Initial version. One-shot and --watch modes.
+    2026-10-02: Show "not checked yet" when the heartbeat has no Mission
+        result, rather than reporting it unreachable.
 
 Usage:
     python status.py            # one snapshot
@@ -93,7 +95,11 @@ def render(data_dir):
         status = "all alive" if not dead else f"DEAD: {', '.join(dead)}"
         lines.append(f"  Threads: {status}")
 
-    lines.append(f"  Mission: {'reachable' if hb.get('mission_available') else 'UNREACHABLE'}")
+    mission = hb.get("mission_available")
+    if mission is None:
+        lines.append("  Mission: not checked yet")
+    else:
+        lines.append(f"  Mission: {'reachable' if mission else 'UNREACHABLE'}")
 
     alarms = hb.get("alarms", {})
     tripped = alarms.get("tripped_rules", [])

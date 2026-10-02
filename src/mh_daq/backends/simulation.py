@@ -13,6 +13,7 @@ Created: 2026-09-25
 Update log:
     2026-09-25: Initial version. Per-scale plausible midpoints plus small
         deterministic-by-seed noise, and a diurnal drift on temperatures.
+    2026-10-02: Import BackendError at module level.
 """
 
 import math
@@ -20,7 +21,7 @@ import random
 from datetime import datetime
 
 from ..config import ThermocoupleChannel, VoltageChannel
-from .base import AcquisitionBackend, RawRecord
+from .base import AcquisitionBackend, BackendError, RawRecord
 
 # Target SI midpoints per scale, used to back out a plausible raw voltage.
 # These are illustrative operating points for simulation only, not calibration.
@@ -73,8 +74,6 @@ class SimulationBackend(AcquisitionBackend):
 
     def read_record(self):
         if not self._is_open:
-            from .base import BackendError
-
             raise BackendError("read_record called before open().")
 
         now = datetime.now()
@@ -100,8 +99,6 @@ class SimulationBackend(AcquisitionBackend):
                 # Blower motor thermocouple, warmer than room, in degC.
                 values[ch.name] = 35.0 + 5.0 * diurnal + self._rng.gauss(0.0, 0.1)
             else:
-                from .base import BackendError
-
                 raise BackendError(f"Unhandled channel type for '{ch.name}'.")
 
         return RawRecord(timestamp=now, values=values)

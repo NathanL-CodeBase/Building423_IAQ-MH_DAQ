@@ -1,4 +1,5 @@
 // MH DAQ group live page: value cards, health indicator, trend plots.
+
 // Group-page health thresholds, in seconds. Correct for near-real-time LOCAL
 // reads. RAISE THESE at Mission deployment (reads lag the snapshot/mirror
 // cadence, up to 60 s): green to about 90 s, down to about 300 s, or the light
@@ -36,14 +37,20 @@ async function refresh(){
     const s = await r.json();
     if (!s.available) return;
 
-    // Weather cards
+    // Weather cards. The snapshot holds the AIO 2's fixed-width strings
+    // ("+020.2", "005"), so parse and print at the sensor's own resolution.
     const w = s.outdoor || {};
-    const wmap = [["wind_speed","Wind","m/s"],["wind_direction","Dir","deg"],
-      ["air_temp","Air T","degC"],["relative_humidity","RH","%"],
-      ["barometric_pressure","Pressure","mb"],["battery_voltage","Battery","V"]];
-    document.getElementById("weather").innerHTML = wmap.map(([k,lab,u])=>
+    const wmap = [["wind_speed","Wind","m/s",1],["wind_direction","Dir","deg",0],
+      ["air_temp","Air T","degC",1],["relative_humidity","RH","%",0],
+      ["barometric_pressure","Pressure","mb",1],["battery_voltage","Battery","V",1]];
+    const fmtOutdoor = (raw, dp) => {
+      if (raw == null || raw === "") return "n/a";
+      const n = Number(raw);
+      return Number.isFinite(n) ? n.toFixed(dp) : raw;
+    };
+    document.getElementById("weather").innerHTML = wmap.map(([k,lab,u,dp])=>
       `<div class="card"><div class="label">${lab}</div>`+
-      `<div class="value">${w[k]??"n/a"}<span class="unit">${u}</span></div></div>`).join("");
+      `<div class="value">${fmtOutdoor(w[k],dp)}<span class="unit">${u}</span></div></div>`).join("");
 
     // Indoor cards, grouped into labeled sections.
     const si = s.indoor_si || {};

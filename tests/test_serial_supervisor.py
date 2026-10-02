@@ -12,6 +12,8 @@ Author: Nathan Lima
 Created: 2026-09-25
 Update log:
     2026-09-25: Initial version.
+    2026-10-02: Check that the snapshot carries alarm state, and that the
+        heartbeat reports the mirror's reachability result.
 """
 
 import json
@@ -204,8 +206,10 @@ def test_supervisor_indoor_alarm_fires(config, tmp_path):
     time.sleep(1.3)  # dwell is 60 s, so no email yet, but rule should be pending
     sup.stop()
     # No email within 1.3 s (dwell 60 s), but the machinery ran without error.
-    # Confirm the indoor path produced data.
-    assert (local / "latest_snapshot.json").exists()
+    # Confirm the indoor path produced data and the snapshot carries alarm state.
+    snap = json.loads((local / "latest_snapshot.json").read_text())
+    assert set(snap["alarms"]) == {"tripped_rules", "frozen_channels", "dropout"}
+    assert sender.sent == []
 
 
 def test_writer_concurrent_indoor_outdoor(config, tmp_path):
@@ -281,3 +285,6 @@ def test_supervisor_writes_heartbeat(config, tmp_path):
     assert hb is not None, "heartbeat never written"
     assert "indoor" in hb["threads_alive"]
     assert hb["threads_alive"]["indoor"] is True
+    # Mission dir tmp_path/"m" does not exist, so the mirror's first tick
+    # records it unreachable (None only if that tick has not run yet).
+    assert hb["mission_available"] in (False, None)

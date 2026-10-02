@@ -11,10 +11,11 @@ Created: 2026-09-25
 Update log:
     2026-09-25: Initial version. Split committed and local config, dataclass
         parse, and validation of scale and alarm references.
+    2026-10-02: Remove unused local_machine_name helper. Note that
+        retention_days is parsed but not yet enforced.
 """
 
 import json
-import socket
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -136,6 +137,8 @@ class LocalConfig:
     smtp_port: int
     smtp_from: str
     smtp_to: list
+    # Parsed but not enforced yet: nothing deletes old local files. Enforcing
+    # it is an open decision in doc/mh-daq-plan.md.
     retention_days: int
     file_naming: dict
 
@@ -417,8 +420,3 @@ def _validate(cfg):
 
     if problems:
         raise ConfigError("Config validation failed:\n  - " + "\n  - ".join(problems))
-
-
-def local_machine_name():
-    """Return this machine's hostname, for filling the template."""
-    return socket.gethostname()
