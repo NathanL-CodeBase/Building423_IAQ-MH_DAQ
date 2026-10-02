@@ -11,7 +11,8 @@ Author: Nathan Lima
 Created: 2026-09-29
 Update log:
     2026-09-29: Initial version. read_span for indoor and outdoor, ISO time
-        output, and min/mean/max bucket downsampling for long windows.
+        output, and mean bucket downsampling for long windows.
+    2026-10-02: Add parse_iso_naive, shared by the dashboard endpoints.
 """
 
 import os
@@ -29,6 +30,30 @@ def data_root():
     """Root holding latest_snapshot.json and the YYYY/ daily-file tree."""
     override = os.environ.get("MH_DAQ_DATA_ROOT")
     return Path(override) if override else Path(_config.local.local_data_dir)
+
+
+def parse_iso_naive(text, default):
+    """Parse an ISO string to a tz-naive local datetime, or return default.
+
+    A trailing Z or UTC offset is dropped, so comparisons against the tz-naive
+    file timestamps never mix aware and naive datetimes.
+
+    Parameters
+    ----------
+    text : str
+        ISO date or datetime. Empty or unparseable returns default.
+    default : datetime
+
+    Returns
+    -------
+    datetime
+    """
+    if not text:
+        return default
+    try:
+        return datetime.fromisoformat(text.replace("Z", "")).replace(tzinfo=None)
+    except ValueError:
+        return default
 
 
 def _daily_path(kind, date):

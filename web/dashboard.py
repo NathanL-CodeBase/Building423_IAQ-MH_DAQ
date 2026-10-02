@@ -14,6 +14,9 @@ Update log:
         page that polls and plots.
     2026-10-01: Remove dead refreshPlot() and duplicate updatePickerCount,
         togglePicker, and windowMinutes definitions from the group page script.
+    2026-10-02: Use shared data_root and parse_iso_naive from data_access.
+        Serve units and default trend channels from /api/channels so the page
+        holds no copy of config. Leave #status to the heartbeat indicator.
 
 Usage (from repo root, mh_daq_web env):
     # Local sim output (default): reads config.local.local_data_dir
@@ -28,10 +31,8 @@ Data source override by environment variable:
 
 import io
 import json
-import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from pathlib import Path as _Path
 
 import pandas as pd
 from fastapi import FastAPI
@@ -39,38 +40,31 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.mh_daq.config import load_config
-from web.data_access import downsample, numeric_columns, read_span
+from src.mh_daq.scaling import si_units_by_channel
+from web.data_access import data_root, downsample, numeric_columns, parse_iso_naive, read_span
 
 app = FastAPI(title="MH DAQ Group Dashboard")
 
 # Serve vendored assets (Plotly) locally so the page has no external CDN
 # dependency, which also matters on an internal server with no outbound web.
-_STATIC = _Path(__file__).parent / "static"
+_STATIC = Path(__file__).parent / "static"
 if _STATIC.exists():
     app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 
 _config = load_config()
+_UNITS = dict(si_units_by_channel(_config))
 
-
-def _data_root():
-    """Folder holding latest_snapshot.json and the YYYY/ daily-file tree."""
-    override = os.environ.get("MH_DAQ_DATA_ROOT")
-    if override:
-        return Path(override)
-    return Path(_config.local.local_data_dir)
+# Trend channels shown before the user picks any. Served to the page through
+# /api/channels so the page and the API share one list.
+_DEFAULT_TREND_CHANNELS = ["T_Liv_M4_C7", "T_Gar_M5_C4", "RH_Liv_M3_C3", "6V_Test_M2_C7"]
 
 
 def _snapshot_path():
-    return _data_root() / "latest_snapshot.json"
+    return data_root() / "latest_snapshot.json"
 
 
 def _heartbeat_path():
-    return _data_root() / "heartbeat.json"
-
-
-def _si_file_for(date):
-    name = _config.local.file_naming["indoor_si"].format(date=date.strftime("%Y%m%d"))
-    return _data_root() / date.strftime("%Y") / name
+    return data_root() / "heartbeat.json"
 
 
 # ---------------------------------------------------------------------------
@@ -121,18 +115,13 @@ def api_heartbeat():
 
 @app.get("/api/channels")
 def api_channels():
-    """Return all plottable indoor channels with their SI units and groups.
+    """Return all indoor channels with SI units, plus the default trend set.
 
-    Used to build the picker. Units come from the config scales; groups reuse
-    the same categories as the card sections.
+    Used to build the picker and to label the cards. Units come from the
+    config scales, in task order.
     """
-    from src.mh_daq.scaling import si_units_by_channel
-
-    units = dict(si_units_by_channel(_config))
-    items = []
-    for name, unit in units.items():
-        items.append({"channel": name, "unit": unit})
-    return JSONResponse({"channels": items})
+    items = [{"channel": name, "unit": unit} for name, unit in _UNITS.items()]
+    return JSONResponse({"channels": items, "defaults": _DEFAULT_TREND_CHANNELS})
 
 
 @app.get("/api/trend")
@@ -154,32 +143,10 @@ def api_trend(start: str = "", end: str = "", channels: str = "", target: int = 
     JSON: 'time' (ISO), one array per channel, 'units' per channel, and the
     actual 'start'/'end' covered.
     """
-    from src.mh_daq.scaling import si_units_by_channel
+    e = parse_iso_naive(end, datetime.now())
+    s = parse_iso_naive(start, e - timedelta(minutes=30))
 
-    unit_map = dict(si_units_by_channel(_config))
-
-    now = datetime.now()
-
-    def _parse_naive(text, default):
-        """Parse an ISO string to a tz-naive local datetime, or return default.
-
-        Accepts a trailing Z or offset and drops it, so comparisons against the
-        tz-naive file timestamps never mix aware and naive datetimes.
-        """
-        if not text:
-            return default
-        t = text.replace("Z", "")
-        try:
-            d = datetime.fromisoformat(t)
-        except ValueError:
-            return default
-        return d.replace(tzinfo=None)
-
-    e = _parse_naive(end, now)
-    s = _parse_naive(start, e - timedelta(minutes=30))
-
-    default = ["T_Liv_M4_C7", "T_Gar_M5_C4", "RH_Liv_M3_C3", "6V_Test_M2_C7"]
-    wanted = [c.strip() for c in channels.split(",") if c.strip()] or default
+    wanted = [c.strip() for c in channels.split(",") if c.strip()] or _DEFAULT_TREND_CHANNELS
 
     df = read_span("indoor_si", s, e)
     if df.empty:
@@ -211,7 +178,7 @@ def api_trend(start: str = "", end: str = "", channels: str = "", target: int = 
     for want, col in colmap.items():
         series = df[col].round(4).where(pd.notna(df[col]), None)
         out[want] = series.tolist()
-        out["units"][want] = unit_map.get(want, "")
+        out["units"][want] = _UNITS.get(want, "")
     return JSONResponse(out)
 
 
@@ -271,17 +238,8 @@ def api_weather_download(start: str = "", end: str = "", vars: str = ""):
     CSV with a single ISO 'datetime' column plus the selected data columns.
     """
     now = datetime.now()
-
-    def _pn(text, default):
-        if not text:
-            return default
-        try:
-            return datetime.fromisoformat(text.replace("Z", "")).replace(tzinfo=None)
-        except ValueError:
-            return default
-
-    s = _pn(start, datetime(now.year, now.month, now.day))
-    e = _pn(end, now)
+    s = parse_iso_naive(start, datetime(now.year, now.month, now.day))
+    e = parse_iso_naive(end, now)
     # If end is a bare date, include the whole day.
     if end and len(end) <= 10:
         e = e + timedelta(days=1) - timedelta(seconds=1)
@@ -344,7 +302,6 @@ _PAGE = r"""<!doctype html>
   .card .label { font-size: 11px; color: #9aa4b2; text-transform: uppercase; letter-spacing: .04em; }
   .card .value { font-size: 20px; font-weight: 600; margin-top: 4px; }
   .card .unit { font-size: 12px; color: #9aa4b2; margin-left: 3px; }
-  #plot { background: #161a22; border: 1px solid #262b36; border-radius: 8px; padding: 8px; }
   .section-title { font-size: 13px; color: #9aa4b2; margin: 18px 0 8px; text-transform: uppercase; letter-spacing: .04em; }
   .controls { display:flex; align-items:center; gap:14px; margin-bottom:8px; }
   .controls select { background:#0f1115; color:#e6e6e6; border:1px solid #2a3140;
@@ -390,24 +347,18 @@ _PAGE = r"""<!doctype html>
   <div id="detail" style="height:420px;"></div>
 </main>
 <script>
-const UNIT = {
-  "6V_Test_M2_C7":"V","cfm_return_duct_M2_C1":"m3/h","watts_blowermtr_M2_C2":"W",
-  "T_blowermtr1_M6_C0":"degC","T_blowermtr2_M6_C1":"degC"
-};
 // Group-page health thresholds, in seconds. Correct for near-real-time LOCAL
 // reads. RAISE THESE at Mission deployment (reads lag the snapshot/mirror
 // cadence, up to 60 s): green to about 90 s, down to about 300 s, or the light
 // reads yellow then red constantly. See doc/mh-daq-plan.md.
 const HEALTH_DELAYED_S = 5;
 const HEALTH_DOWN_S = 60;
+// Channel name to SI unit, filled from /api/channels (config is the source).
+let UNITS = {};
 function unitFor(k){
-  if (k in UNIT) return UNIT[k];
-  if (k.startsWith("T_")) return "degC";
-  if (k.startsWith("RH_")) return "%";
-  if (k.startsWith("dP_")) return "Pa";
-  return "";
+  const u = UNITS[k] || "";
+  return u === "percent" ? "%" : u;
 }
-function label(k){ return k; }
 
 // Group indoor channels into sections by name pattern, in display order.
 // A channel matches the first group whose test returns true.
@@ -426,15 +377,12 @@ function groupFor(k){
   return "Other";
 }
 
+// Refresh the value cards. Health status is shown by refreshHealth().
 async function refresh(){
-  const st = document.getElementById("status");
   try {
     const r = await fetch("/api/snapshot");
     const s = await r.json();
-    if (!s.available){ st.textContent = "no data: " + (s.reason||""); st.className="down"; return; }
-    const age = s.age_s==null ? "?" : Math.round(s.age_s);
-    if (s.age_s!=null && s.age_s > 10){ st.textContent = "STALE ("+age+"s old)"; st.className="stale"; }
-    else { st.textContent = "live ("+age+"s)"; st.className=""; }
+    if (!s.available) return;
 
     // Weather cards
     const w = s.outdoor || {};
@@ -459,13 +407,13 @@ async function refresh(){
       html += `<div class="section-title">${name}</div><div class="grid">`;
       html += keys.map(k=>{
         const v = si[k]; const val = (typeof v==="number") ? v.toFixed(2) : v;
-        return `<div class="card"><div class="label">${label(k)}</div>`+
+        return `<div class="card"><div class="label">${k}</div>`+
           `<div class="value">${val}<span class="unit">${unitFor(k)}</span></div></div>`;
       }).join("");
       html += `</div>`;
     }
     document.getElementById("indoor-groups").innerHTML = html;
-  } catch(e){ st.textContent = "error"; st.className="down"; }
+  } catch(e){ console.error("snapshot error:", e); }
 }
 
 // Drive the header indicator from the heartbeat. Worst applicable condition
@@ -507,7 +455,7 @@ async function refreshHealth(){
 }
 
 let ALL_CHANNELS = [];
-let SELECTED = new Set(["T_Liv_M4_C7","T_Gar_M5_C4","RH_Liv_M3_C3","6V_Test_M2_C7"]);
+let SELECTED = new Set();  // seeded from the API defaults in loadChannels()
 let DETAIL_RANGE = null;  // [startISO, endISO] or null = follow overview
 const OVERVIEW_TARGET = 500;
 const DETAIL_TARGET = 4000;
@@ -517,6 +465,8 @@ async function loadChannels(){
     const r = await fetch("/api/channels");
     const d = await r.json();
     ALL_CHANNELS = d.channels || [];
+    UNITS = Object.fromEntries(ALL_CHANNELS.map(c => [c.channel, c.unit]));
+    SELECTED = new Set(d.defaults || []);
     buildPicker(); updatePickerCount();
   }catch(e){ console.error("channels error:", e); }
 }
@@ -635,7 +585,9 @@ async function refreshDetail(){
   }catch(e){ console.error("detail error:", e); }
 }
 
-refresh(); refreshHealth(); loadChannels(); refreshOverview(); refreshDetail();
+// Cards and trends need units and the default selection, so load channels first.
+refreshHealth();
+loadChannels().then(()=>{ refresh(); refreshOverview(); refreshDetail(); });
 document.getElementById("window").addEventListener("change", ()=>{
   DETAIL_RANGE=null;  // new overview window resets the detail to default
   document.getElementById("detail-label").textContent="";
