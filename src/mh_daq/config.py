@@ -15,6 +15,8 @@ Update log:
         retention_days is parsed but not yet enforced.
     2026-10-02: Honor MH_DAQ_CONFIG_DIR, so tests use a temporary config.
     2026-10-02: Parse and validate display_ranges (dashboard card colors).
+    2026-10-02: Read config files as utf-8-sig so a byte-order mark from a
+        Windows editor does not stop the daemon at startup.
 """
 
 import json
@@ -229,8 +231,11 @@ def _default_search_dirs(config_dir):
 
 
 def _load_json(path):
+    # utf-8-sig accepts files with or without a byte-order mark. Windows
+    # PowerShell 5.1 (Out-File, Set-Content -Encoding utf8) and older Notepad
+    # write one, and plain utf-8 decoding makes json.load reject the file.
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8-sig") as f:
             return json.load(f)
     except json.JSONDecodeError as e:
         raise ConfigError(f"{path} is not valid JSON: {e}") from e
