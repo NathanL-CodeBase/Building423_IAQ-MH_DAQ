@@ -2,8 +2,8 @@
 REM MH DAQ autostart. Launched by Splinterware System Scheduler.
 REM Edit CONDA_PATH and REPO_PATH for the DAQ PC.
 
-set CONDA_PATH=C:\Users\iaq\miniforge3
-set REPO_PATH=C:\Users\iaq\Documents\building423_iaq-mh_daq
+set CONDA_PATH=C:\Users\iaq\AppData\Local\miniforge3
+set REPO_PATH=C:\Users\iaq\Documents\nist_mh-daq-rebuild
 
 call "%CONDA_PATH%\Scripts\activate.bat" iaqmh_daq
 cd /d "%REPO_PATH%"
