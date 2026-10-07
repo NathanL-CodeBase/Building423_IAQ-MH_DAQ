@@ -186,9 +186,14 @@ class MissionMirror:
         if src.exists():
             self._copy_atomic(src, self._mission_snap / "latest_snapshot.json")
             copied = True
+            logger.info("Snapshot mirrored.")
         hb = self._local / "heartbeat.json"
         if hb.exists():
-            self._copy_atomic(hb, self._mission_snap / "heartbeat.json")
+            try:
+                self._copy_atomic(hb, self._mission_snap / "heartbeat.json")
+                logger.info("Heartbeat mirrored.")
+            except OSError as e:
+                logger.warning("Heartbeat mirror failed: %s", e)
         return copied
 
     def tick(self, now=None):
