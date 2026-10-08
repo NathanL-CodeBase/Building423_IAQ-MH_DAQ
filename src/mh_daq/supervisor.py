@@ -18,17 +18,18 @@ Update log:
         patching private attributes. Outdoor values pass through a locked
         LatestFields holder. Heartbeat reads the mirror's last reachability
         result instead of probing Mission every second.
+    2026-10-08: Write the heartbeat through atomic_write_json, which retries
+        while the mirror holds the file open.
 """
 
-import json
 import logging
-import os
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
 
 from .outdoor_reader import LatestFields
+from .writer import atomic_write_json
 
 logger = logging.getLogger("mh_daq.supervisor")
 
@@ -84,10 +85,7 @@ class Supervisor:
         }
         try:
             self._hb_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self._hb_path.with_suffix(".json.tmp")
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(hb, f, indent=2)
-            os.replace(tmp, self._hb_path)
+            atomic_write_json(self._hb_path, hb)
         except OSError as e:
             logger.warning("Heartbeat write failed: %s", e)
 

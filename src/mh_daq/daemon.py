@@ -17,6 +17,9 @@ Update log:
     2026-10-02: Run alarms inside run_once so the snapshot carries the
         current alarm state. Public hooks (set_outdoor_provider, set_alarms,
         writer, last_record_time) replace the supervisor's private patching.
+    2026-10-08: A snapshot write failure logs a warning and keeps the cycle.
+        The data rows are already written, and the next cycle rewrites the
+        snapshot, so it is not an acquisition failure.
 """
 
 import logging
@@ -86,7 +89,10 @@ class AcquisitionDaemon:
                 logger.info("Indoor alarm event: %s", event)
             alarm_state = self._alarms.current_state()
 
-        self._writer.write_snapshot(rec.timestamp, si, self._outdoor_provider(), alarm_state)
+        try:
+            self._writer.write_snapshot(rec.timestamp, si, self._outdoor_provider(), alarm_state)
+        except OSError as e:
+            logger.warning("Snapshot write failed; next cycle rewrites it: %s", e)
         self.last_record_time = rec.timestamp
         return si
 

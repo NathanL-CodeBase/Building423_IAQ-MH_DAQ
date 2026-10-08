@@ -15,11 +15,15 @@ Update log:
     2026-09-25: Initial version. Single-header SI columns with units baked into
         names, plain names in the raw file, thermocouple raw columns labeled
         degC. Snapshot written atomically via a temp file and replace.
+    2026-10-08: Add atomic_write_json, which retries the replace while another
+        handle holds the target open (WinError 5 on Windows). Shared with the
+        heartbeat writer.
 """
 
 import json
 import os
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -29,6 +33,44 @@ from .scaling import si_unit_for_channel
 _DATE_FMT = "%m/%d/%Y"
 _TIME_FMT = "%H:%M:%S"
 _FILE_DATE_FMT = "%Y%m%d"
+
+# Retry budget for replacing a file another handle holds open. 5 tries 20 ms
+# apart caps the wait at about 100 ms, well inside the 1 s record period.
+_REPLACE_ATTEMPTS = 5
+_REPLACE_DELAY_S = 0.02
+
+
+def atomic_write_json(path, data):
+    """Write data as JSON to path via a temp file and replace.
+
+    A reader never sees a half-written file. On Windows the replace fails with
+    PermissionError while any other handle has the target open, for example
+    the Mission mirror copying it or status.py reading it. Those holds last
+    milliseconds, so the replace is retried briefly before giving up.
+
+    Parameters
+    ----------
+    path : Path
+    data : object
+        JSON-serializable.
+
+    Raises
+    ------
+    PermissionError
+        If the target is still held after the last attempt.
+    """
+    path = Path(path)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    for attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(_REPLACE_DELAY_S)
 
 
 def _raw_unit_for_channel(channel):
@@ -231,7 +273,8 @@ class DailyWriter:
 
         The snapshot is a small JSON file the status tool and future Mission
         publish read without touching the open daily files. Written to a temp
-        file then replaced, so a reader never sees a half-written file.
+        file then replaced, so a reader never sees a half-written file. Raises
+        PermissionError if a reader holds the snapshot past the retry budget.
 
         Parameters
         ----------
@@ -249,12 +292,8 @@ class DailyWriter:
             "outdoor": outdoor_fields,
             "alarms": alarm_state or {},
         }
-        path = self._snapshot_path()
-        tmp = path.with_suffix(".json.tmp")
         with self._lock:
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(snap, f, indent=2)
-            os.replace(tmp, path)  # atomic on Windows and POSIX
+            atomic_write_json(self._snapshot_path(), snap)
 
     def close(self):
         """Close all open daily files. Safe to call more than once."""

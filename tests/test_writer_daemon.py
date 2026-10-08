@@ -6,14 +6,19 @@ Tests for the daily writer and daemon core.
 Purpose: Confirm the writer produces the three files with correct headers and
     a sidecar, writes rows, and produces a valid atomic snapshot. Confirm the
     daemon single-cycle path reads, scales, and writes. Uses a temp output dir
-    and the simulation backend, no hardware.
+    and the simulation backend, no hardware. Confirm the atomic JSON write
+    rides out a short hold on the target (Windows WinError 5) and that a
+    snapshot failure does not fail the acquisition cycle.
 Author: Nathan Lima
 Created: 2026-09-25
 Update log:
     2026-09-25: Initial version.
+    2026-10-08: Add atomic_write_json retry and snapshot-failure tests.
 """
 
 import json
+import sys
+import threading
 
 import pytest
 
@@ -21,7 +26,7 @@ from src.mh_daq.backends import SimulationBackend
 from src.mh_daq.config import load_config
 from src.mh_daq.daemon import AcquisitionDaemon
 from src.mh_daq.scaling import scale_record
-from src.mh_daq.writer import DailyWriter
+from src.mh_daq.writer import DailyWriter, atomic_write_json
 
 
 @pytest.fixture(scope="module")
@@ -115,3 +120,49 @@ def test_daemon_multiple_cycles_append(config, tmp_path):
     be.close()
     # One header plus five rows.
     assert len(lines) == 6
+
+
+# Holding a file open blocks a replace onto it only on Windows, which is where
+# the daemon runs and where the mirror's copy caused WinError 5.
+windows_only = pytest.mark.skipif(sys.platform != "win32", reason="Windows file locking")
+
+
+@windows_only
+def test_atomic_write_retries_while_target_held(tmp_path):
+    path = tmp_path / "heartbeat.json"
+    atomic_write_json(path, {"n": 1})
+    reader = open(path, encoding="utf-8")
+    # Release well inside the ~100 ms retry budget, as the mirror's copy does.
+    threading.Timer(0.03, reader.close).start()
+    atomic_write_json(path, {"n": 2})
+    assert json.loads(path.read_text(encoding="utf-8")) == {"n": 2}
+
+
+@windows_only
+def test_atomic_write_raises_when_held_past_budget(tmp_path):
+    path = tmp_path / "heartbeat.json"
+    atomic_write_json(path, {"n": 1})
+    with open(path, encoding="utf-8"):
+        with pytest.raises(PermissionError):
+            atomic_write_json(path, {"n": 2})
+    assert json.loads(path.read_text(encoding="utf-8")) == {"n": 1}
+
+
+def test_daemon_cycle_survives_snapshot_failure(config, tmp_path, monkeypatch, caplog):
+    be = SimulationBackend(config, seed=4)
+    be.open()
+    with DailyWriter(config, base_dir=tmp_path) as w:
+
+        def held(*args, **kwargs):
+            raise PermissionError(5, "Access is denied")
+
+        monkeypatch.setattr(w, "write_snapshot", held)
+        d = AcquisitionDaemon(config, be, w)
+        si = d.run_once()
+    be.close()
+    assert len(si) == 42
+    assert d.last_record_time is not None
+    si_files = list(tmp_path.rglob("*-MH_Indoor_SI.txt"))
+    assert len(si_files) == 1
+    assert len(si_files[0].read_text(encoding="utf-8").splitlines()) == 2
+    assert "Snapshot write failed" in caplog.text
