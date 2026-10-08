@@ -1,11 +1,10 @@
 // MH DAQ group live page: value cards, health indicator, trend plots.
 
-// Group-page health thresholds, in seconds. Correct for near-real-time LOCAL
-// reads. RAISE THESE at Mission deployment (reads lag the snapshot/mirror
-// cadence, up to 60 s): green to about 90 s, down to about 300 s, or the light
-// reads yellow then red constantly. See doc/mh-daq-plan.md.
-const HEALTH_DELAYED_S = 5;
-const HEALTH_DOWN_S = 60;
+// Group-page health thresholds, in seconds. Filled from /api/channels, which
+// picks them for the data source (Mission reads lag the snapshot mirror). The
+// values here are the local ones, used until that call returns.
+let HEALTH_DELAYED_S = 5;
+let HEALTH_DOWN_S = 60;
 // Channel name to SI unit, filled from /api/channels (config is the source).
 let UNITS = {};
 function unitFor(k){
@@ -142,6 +141,7 @@ async function loadChannels(){
     UNITS = Object.fromEntries(ALL_CHANNELS.map(c => [c.channel, c.unit]));
     RANGES = d.display_ranges || {};
     SELECTED = new Set(d.defaults || []);
+    if (d.health){ HEALTH_DELAYED_S = d.health.delayed_s; HEALTH_DOWN_S = d.health.down_s; }
     buildPicker(); updatePickerCount();
   }catch(e){ console.error("channels error:", e); }
 }
@@ -261,8 +261,7 @@ async function refreshDetail(){
 }
 
 // Cards and trends need units and the default selection, so load channels first.
-refreshHealth();
-loadChannels().then(()=>{ refresh(); refreshOverview(); refreshDetail(); });
+loadChannels().then(()=>{ refreshHealth(); refresh(); refreshOverview(); refreshDetail(); });
 document.getElementById("window").addEventListener("change", ()=>{
   DETAIL_RANGE=null;  // new overview window resets the detail to default
   document.getElementById("detail-label").textContent="";

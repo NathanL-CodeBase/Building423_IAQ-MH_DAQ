@@ -20,16 +20,26 @@ Update log:
         Move page HTML and JS to web/static/ (index.*, weather.*).
     2026-10-02: Serve display_ranges from config through /api/channels for
         the living-space T and RH card colors.
+    2026-10-08: Read from Mission when MH_DAQ_SOURCE=mission, with the
+        snapshot and heartbeat from mission_snapshot_dir. Serve health
+        thresholds per source through /api/channels.
 
-Usage (from repo root, mh_daq_web env):
-    # Local sim output (default): reads config.local.local_data_dir
+Usage (from repo root, mh_daq_web env, PowerShell):
+    # DAQ PC or sim machine (default): reads config.local.local_data_dir
+    python -m uvicorn web.dashboard:app --host 127.0.0.1 --port 8000
+    # Remote read-only machine: reads the Mission copies
+    $env:MH_DAQ_SOURCE = "mission"
     python -m uvicorn web.dashboard:app --host 127.0.0.1 --port 8000
     # then open http://127.0.0.1:8000
 
-Data source override by environment variable:
-    MH_DAQ_DATA_ROOT   Folder holding latest_snapshot.json and YYYY/ daily files.
-                       Defaults to config.local.local_data_dir. Set to the
-                       Mission raw_data/mh_daq path (plus a snapshot path) later.
+Data source by environment variable:
+    MH_DAQ_SOURCE      'local' (default) or 'mission'. Mission mode reads the
+                       dailies from mission_data_dir/<mirror.mission_subdir> and
+                       the snapshot and heartbeat from mission_snapshot_dir, all
+                       from daq_local.json.
+    MH_DAQ_DATA_ROOT   Local mode only: a folder holding latest_snapshot.json,
+                       heartbeat.json, and YYYY/ daily files. Defaults to
+                       config.local.local_data_dir.
 """
 
 import io
@@ -44,7 +54,14 @@ from fastapi.staticfiles import StaticFiles
 
 from src.mh_daq.config import load_config
 from src.mh_daq.scaling import si_units_by_channel
-from web.data_access import data_root, downsample, numeric_columns, parse_iso_naive, read_span
+from web.data_access import (
+    data_source,
+    downsample,
+    numeric_columns,
+    parse_iso_naive,
+    read_span,
+    snapshot_root,
+)
 
 app = FastAPI(title="MH DAQ Group Dashboard")
 
@@ -63,13 +80,24 @@ _DISPLAY_RANGES = {
 # /api/channels so the page and the API share one list.
 _DEFAULT_TREND_CHANNELS = ["T_Liv_M4_C7", "T_Gar_M5_C4", "RH_Liv_M3_C3", "6V_Test_M2_C7"]
 
+# Heartbeat age, in seconds, past which the page shows yellow (delayed) and red
+# (down). Local reads see the heartbeat within seconds. Mission reads lag the
+# snapshot mirror (mirror.snapshot_interval_s, 60 s) plus the mirror tick, so
+# tighter limits would hold the indicator at yellow or red on a healthy system.
+# Resolved at import so a bad MH_DAQ_SOURCE fails at startup.
+_SOURCE = data_source()
+_HEALTH = {
+    "local": {"delayed_s": 5, "down_s": 60},
+    "mission": {"delayed_s": 90, "down_s": 300},
+}[_SOURCE]
+
 
 def _snapshot_path():
-    return data_root() / "latest_snapshot.json"
+    return snapshot_root() / "latest_snapshot.json"
 
 
 def _heartbeat_path():
-    return data_root() / "heartbeat.json"
+    return snapshot_root() / "heartbeat.json"
 
 
 # ---------------------------------------------------------------------------
@@ -120,13 +148,14 @@ def api_heartbeat():
 
 @app.get("/api/channels")
 def api_channels():
-    """Return all indoor channels with SI units, the default trend set, and
-    the card color ranges.
+    """Return all indoor channels with SI units, the default trend set, the
+    card color ranges, and the health thresholds.
 
     Used to build the picker and to label and color the cards. Units come
     from the config scales, in task order. display_ranges maps a channel name
     to {"low", "high"} (either may be null); channels without a range are
-    absent.
+    absent. health holds the heartbeat ages {"delayed_s", "down_s"} for the
+    active data source.
     """
     items = [{"channel": name, "unit": unit} for name, unit in _UNITS.items()]
     return JSONResponse(
@@ -134,6 +163,8 @@ def api_channels():
             "channels": items,
             "defaults": _DEFAULT_TREND_CHANNELS,
             "display_ranges": _DISPLAY_RANGES,
+            "source": _SOURCE,
+            "health": _HEALTH,
         }
     )
 

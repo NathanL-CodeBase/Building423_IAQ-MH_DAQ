@@ -13,6 +13,10 @@ Update log:
     2026-09-29: Initial version. read_span for indoor and outdoor, ISO time
         output, and mean bucket downsampling for long windows.
     2026-10-02: Add parse_iso_naive, shared by the dashboard endpoints.
+    2026-10-08: Add MH_DAQ_SOURCE=mission for remote read-only machines. Split
+        the data root into daily_root and snapshot_root, because Mission keeps
+        the dailies under raw_data/<mission_subdir> and the snapshot and
+        heartbeat under live_snapshot.
 """
 
 import os
@@ -25,11 +29,47 @@ from src.mh_daq.config import load_config
 
 _config = load_config()
 
+_SOURCES = ("local", "mission")
 
-def data_root():
-    """Root holding latest_snapshot.json and the YYYY/ daily-file tree."""
+
+def data_source():
+    """Return the read source from MH_DAQ_SOURCE: 'local' (default) or 'mission'.
+
+    'local' reads the daemon's own output folder, so it only works on the DAQ
+    PC or a sim machine. 'mission' reads the mirrored copies on the Mission
+    share, for any remote machine that only views the data.
+
+    Raises
+    ------
+    ValueError
+        If MH_DAQ_SOURCE holds anything other than 'local' or 'mission'.
+    """
+    source = os.environ.get("MH_DAQ_SOURCE", "local").strip().lower() or "local"
+    if source not in _SOURCES:
+        raise ValueError(f"MH_DAQ_SOURCE must be one of {_SOURCES}, got {source!r}.")
+    return source
+
+
+def daily_root():
+    """Root holding the YYYY/ daily-file tree.
+
+    MH_DAQ_DATA_ROOT overrides it in local mode, for reading a copied folder.
+    """
+    if data_source() == "mission":
+        return Path(_config.local.mission_data_dir) / _config.mirror.mission_subdir
     override = os.environ.get("MH_DAQ_DATA_ROOT")
     return Path(override) if override else Path(_config.local.local_data_dir)
+
+
+def snapshot_root():
+    """Folder holding latest_snapshot.json and heartbeat.json.
+
+    Locally the daemon writes both next to the daily tree; on Mission the
+    mirror puts them in mission_snapshot_dir.
+    """
+    if data_source() == "mission":
+        return Path(_config.local.mission_snapshot_dir)
+    return daily_root()
 
 
 def parse_iso_naive(text, default):
@@ -62,7 +102,7 @@ def _daily_path(kind, date):
     kind is 'indoor_si' or 'outdoor'; both keys exist in file_naming.
     """
     name = _config.local.file_naming[kind].format(date=date.strftime("%Y%m%d"))
-    return data_root() / date.strftime("%Y") / name
+    return daily_root() / date.strftime("%Y") / name
 
 
 def _parse_datetime(df):

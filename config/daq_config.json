@@ -9,10 +9,10 @@
   },
   "mirror": {
     "snapshot_interval_s": 60,
-    "inprogress_interval_s": 0,
+    "inprogress_interval_s": 300,
     "retry_interval_s": 30,
     "mission_subdir": "mh_daq",
-    "notes": "snapshot_interval_s: how often to push latest_snapshot.json to Mission. inprogress_interval_s: how often to push the current day's still-open daily files (0 means only at rollover). retry_interval_s: base tick and retry cadence. mission_subdir: namespace under mission_data_dir for this system's files, keeping them separate from the LabVIEW-era indoor_daq and weather_station folders."
+    "notes": "snapshot_interval_s: how often to push latest_snapshot.json to Mission. inprogress_interval_s: how often to push the current day's still-open daily files (0 means only at rollover); remote dashboards in mission mode see today's trends only as fresh as this. retry_interval_s: base tick and retry cadence. mission_subdir: namespace under mission_data_dir for this system's files, keeping them separate from the LabVIEW-era indoor_daq and weather_station folders."
   },
   "scales": {
     "volts": {

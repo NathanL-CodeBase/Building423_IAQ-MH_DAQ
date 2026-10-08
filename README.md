@@ -84,7 +84,16 @@ conda activate mh_daq_web
 python -m uvicorn web.dashboard:app --host 127.0.0.1 --port 8000
 ```
 
-Then open `http://127.0.0.1:8000` for the group dashboard and `http://127.0.0.1:8000/weather` for the weather page. By default the dashboard reads the local data directory from `daq_local.json`; set the `MH_DAQ_DATA_ROOT` environment variable to point it at the network storage location instead.
+Then open `http://127.0.0.1:8000` for the group dashboard and `http://127.0.0.1:8000/weather` for the weather page. By default the dashboard reads the local data directory from `daq_local.json`, which only holds live data on the DAQ PC itself. On any other machine, read the Mission copies instead:
+
+```
+$env:MH_DAQ_SOURCE = "mission"
+python -m uvicorn web.dashboard:app --host 127.0.0.1 --port 8000
+```
+
+On Windows, `start_dashboard_mission.bat` does the same: it activates `mh_daq_web` from `%USERPROFILE%\miniforge3` (override with `MH_DAQ_CONDA_PATH`), sets `MH_DAQ_SOURCE`, and starts the server from the repository root.
+
+Mission mode takes the daily files from `mission_data_dir/mh_daq` and the snapshot and heartbeat from `mission_snapshot_dir`, both set in `daq_local.json`. Trends for the current day lag by up to `mirror.inprogress_interval_s` (300 s), and the health indicator allows for the 60 s snapshot mirror.
 
 Run the tests:
 

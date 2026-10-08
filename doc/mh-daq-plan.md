@@ -26,7 +26,7 @@ Ordered roughly by when each should happen.
 
 4. **Local retention window.** `retention_days` is 90 in `daq_local.template.json`. The config loader reads it, but nothing deletes old local files yet. Enforcing it means automatic deletion of local data, so decide the window and the rule (for example, delete only files already confirmed on Mission) before coding it.
 
-5. **Deploy the web layer to the web box.** The box runs Windows 11 now and may move to a Linux VM through IT; uvicorn runs the same on both. Point `MH_DAQ_DATA_ROOT` at `raw_data/mh_daq`. Mission keeps the snapshot and heartbeat in `live_snapshot` and the dailies in `raw_data/mh_daq`, so the web layer needs a second environment variable for the snapshot root. Raise the group-page health thresholds in `web/static/index.js` at the same time: `HEALTH_DELAYED_S` from 5 s to about 90 s and `HEALTH_DOWN_S` from 60 s to about 300 s. Mission reads lag the 60 s snapshot mirror, so the local values would show yellow, then red, all the time.
+5. **Deploy the web layer to the web box.** The box runs Windows 11 now and may move to a Linux VM through IT; uvicorn runs the same on both. Run it with `MH_DAQ_SOURCE=mission`, which reads the dailies from `raw_data/mh_daq` and the snapshot and heartbeat from `live_snapshot` and switches the health thresholds to 90 s (delayed) and 300 s (down). Already in use on the desktop and AppleSeed during the week-long log test started 2026-10-07.
 
 6. **Access separation.** The group-private page shows all channels; the NIST-internal weather page shows AIO 2 only. Two routes on one app with different scopes is the simplest layout. Choose the auth mechanism once the box is on a reachable network.
 
