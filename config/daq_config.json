@@ -180,8 +180,7 @@
         "high": 28.0,
         "low": null,
         "dwell_s": 60,
-        "unit": "degC",
-        "email_to": ["nathan.lima@nist.gov", "daniel.greb@nist.gov"]
+        "unit": "degC"
       },
       {
         "channel": "T_Gar_M5_C4",
@@ -189,8 +188,7 @@
         "high": null,
         "low": 15.0,
         "dwell_s": 60,
-        "unit": "degC",
-        "email_to": ["nathan.lima@nist.gov", "daniel.greb@nist.gov"]
+        "unit": "degC"
       }
     ]
   },

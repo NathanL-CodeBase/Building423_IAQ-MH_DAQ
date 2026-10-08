@@ -105,6 +105,7 @@ class AlarmEngine:
         self._min_interval_s = float(config.alarm_email.get("min_interval_s", 300))
         self._q = config.quality
         self._machine = config.local.machine_name
+        self._rule_email_map = config.local.alarm_rule_email
 
         self._state = {self._key(r): RuleState() for r in self._rules}
         self._history = defaultdict(lambda: deque(maxlen=max(1, self._q.frozen_count)))
@@ -194,6 +195,7 @@ class AlarmEngine:
             cond = True
 
         events = []
+        to_addrs = self._rule_email_map.get(rule.description)
         if cond:
             if st.condition_since is None:
                 st.condition_since = now
@@ -205,7 +207,7 @@ class AlarmEngine:
                     self._emit(
                         f"ALARM: {rule.description}",
                         self._trip_body(rule, value, now),
-                        to_addrs=rule.email_to,
+                        to_addrs=to_addrs,
                     )
                 )
             elif (
@@ -218,7 +220,7 @@ class AlarmEngine:
                     self._emit(
                         f"ALARM ONGOING: {rule.description}",
                         self._trip_body(rule, value, now, ongoing=True),
-                        to_addrs=rule.email_to,
+                        to_addrs=to_addrs,
                     )
                 )
         else:
@@ -229,7 +231,7 @@ class AlarmEngine:
                         f"CLEARED: {rule.description}",
                         f"{rule.description} cleared at {now:%Y-%m-%d %H:%M:%S}. "
                         f"{rule.channel} = {value:.2f} {rule.unit} on {self._machine}.",
-                        to_addrs=rule.email_to,
+                        to_addrs=to_addrs,
                     )
                 )
             st.condition_since = None

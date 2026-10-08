@@ -108,7 +108,6 @@ class AlarmRule:
     unit: str
     high: Optional[float] = None
     low: Optional[float] = None
-    email_to: Optional[list] = None
 
 
 @dataclass(frozen=True)
@@ -164,6 +163,7 @@ class LocalConfig:
     # it is an open decision in doc/mh-daq-plan.md.
     retention_days: int
     file_naming: dict
+    alarm_rule_email: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -359,7 +359,6 @@ def _parse(committed, local):
             unit=r["unit"],
             high=r.get("high"),
             low=r.get("low"),
-            email_to=r.get("email_to"),
         )
         for r in committed["alarms"]["rules"]
     ]
@@ -409,6 +408,7 @@ def _parse(committed, local):
         smtp_to=list(lsm["to_addrs"]),
         retention_days=int(local["retention_days"]),
         file_naming=dict(local["file_naming"]),
+        alarm_rule_email=dict(local.get("alarm_rule_email", {})),
     )
 
     return SystemConfig(

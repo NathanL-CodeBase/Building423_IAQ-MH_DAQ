@@ -15,12 +15,16 @@
     "host": "REPLACE_WITH_SMTP_HOST",
     "port": "REPLACE_WITH_SMTP_PORT",
     "from_addr": "REPLACE_WITH_SENDER@email.gov",
-    "to_addrs": ["REPLACE_WITH_RECIPIENT@email.gov", "daniel.greb@nist.gov"]
+    "to_addrs": ["REPLACE_WITH_RECIPIENT@email.gov", "REPLACE_WITH_RECIPIEN2@nist.gov"]
   },
   "retention_days": 90,
   "file_naming": {
     "indoor_si": "{date}-MH_Indoor_SI.txt",
     "indoor_raw": "{date}-MH_Indoor_raw.txt",
     "outdoor": "{date}-MH_Outdoor.txt"
+  },
+  "alarm_rule_email": {
+    "Garage over-temperature": ["REPLACE_WITH_RECIPIENT@email.gov", "REPLACE_WITH_RECIPIEN2@nist.gov"],
+    "Garage under-temperature": ["REPLACE_WITH_RECIPIENT@email.gov", "REPLACE_WITH_RECIPIEN2@nist.gov"]
   }
 }
