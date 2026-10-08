@@ -91,7 +91,7 @@ $env:MH_DAQ_SOURCE = "mission"
 python -m uvicorn web.dashboard:app --host 127.0.0.1 --port 8000
 ```
 
-On Windows, `start_dashboard_mission.bat` does the same: it activates `mh_daq_web` from `%USERPROFILE%\miniforge3` (override with `MH_DAQ_CONDA_PATH`), sets `MH_DAQ_SOURCE`, and starts the server from the repository root.
+On Windows, `start_dashboard_mission.bat` does the same: it activates `mh_daq_web` from `%USERPROFILE%\miniforge3` or `%LOCALAPPDATA%\miniforge3` (override with `MH_DAQ_CONDA_PATH`), sets `MH_DAQ_SOURCE`, and starts the server from the repository root.
 
 Mission mode takes the daily files from `mission_data_dir/mh_daq` and the snapshot and heartbeat from `mission_snapshot_dir`, both set in `daq_local.json`. Trends for the current day lag by up to `mirror.inprogress_interval_s` (300 s), and the health indicator allows for the 60 s snapshot mirror.
 

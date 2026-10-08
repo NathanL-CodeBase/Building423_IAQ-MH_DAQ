@@ -17,6 +17,8 @@ Update log:
     2026-10-02: Parse and validate display_ranges (dashboard card colors).
     2026-10-02: Read config files as utf-8-sig so a byte-order mark from a
         Windows editor does not stop the daemon at startup.
+    2026-10-08: Flag the SMTP host and port placeholders from the generic
+        template with a clear message instead of an int() error.
 """
 
 import json
@@ -400,7 +402,7 @@ def _parse(committed, local):
         com_port=ls["com_port"],
         auto_detect_baud=int(ls["auto_detect_baud"]),
         smtp_host=lsm["host"],
-        smtp_port=int(lsm["port"]),
+        smtp_port=_parse_smtp_port(lsm["port"]),
         smtp_from=lsm["from_addr"],
         smtp_to=list(lsm["to_addrs"]),
         retention_days=int(local["retention_days"]),
@@ -423,6 +425,21 @@ def _parse(committed, local):
         local=local_cfg,
         display_ranges=display_ranges,
     )
+
+
+def _parse_smtp_port(value):
+    """Return the SMTP port as an int, or raise ConfigError for a placeholder.
+
+    The template ships the port as REPLACE_WITH_SMTP_PORT, which int() cannot
+    read; a plain ValueError would not say which setting to fix.
+    """
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ConfigError(
+            "Config validation failed:\n  - smtp port in daq_local.json is not a "
+            f"number ({value!r}); set it to the SMTP server port."
+        ) from None
 
 
 def _validate(cfg):
@@ -458,6 +475,8 @@ def _validate(cfg):
 
     if "REPLACE" in cfg.local.machine_name.upper():
         problems.append("machine_name in daq_local.json is still a placeholder.")
+    if "REPLACE" in cfg.local.smtp_host.upper():
+        problems.append("smtp host in daq_local.json is still a placeholder.")
     if "REPLACE" in cfg.local.smtp_from.upper():
         problems.append("smtp from_addr in daq_local.json is still a placeholder.")
     if any("REPLACE" in a.upper() for a in cfg.local.smtp_to):

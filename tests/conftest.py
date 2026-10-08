@@ -13,6 +13,7 @@ Author: Nathan Lima
 Created: 2026-10-02
 Update log:
     2026-10-02: Initial version.
+    2026-10-08: Fill the SMTP host and port, now placeholders in the template.
 """
 
 import json
@@ -40,6 +41,8 @@ def pytest_configure(config):
         "mission_data_dir": str(_session_dir / "mission"),
         "mission_snapshot_dir": str(_session_dir / "mission_snapshot"),
     }
+    local["smtp"]["host"] = "smtp.example.invalid"
+    local["smtp"]["port"] = 25
     local["smtp"]["from_addr"] = "pytest-sender@example.invalid"
     local["smtp"]["to_addrs"] = ["pytest-recipient@example.invalid"]
     with open(cfg_dir / "daq_local.json", "w", encoding="utf-8") as f:
