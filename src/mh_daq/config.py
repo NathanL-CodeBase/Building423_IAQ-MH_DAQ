@@ -108,6 +108,7 @@ class AlarmRule:
     unit: str
     high: Optional[float] = None
     low: Optional[float] = None
+    email_to: Optional[list] = None
 
 
 @dataclass(frozen=True)
@@ -358,6 +359,7 @@ def _parse(committed, local):
             unit=r["unit"],
             high=r.get("high"),
             low=r.get("low"),
+            email_to=r.get("email_to"),
         )
         for r in committed["alarms"]["rules"]
     ]

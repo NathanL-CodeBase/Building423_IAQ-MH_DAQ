@@ -15,7 +15,7 @@
     "host": "REPLACE_WITH_SMTP_HOST",
     "port": "REPLACE_WITH_SMTP_PORT",
     "from_addr": "REPLACE_WITH_SENDER@email.gov",
-    "to_addrs": ["REPLACE_WITH_RECIPIENT@email.gov"]
+    "to_addrs": ["REPLACE_WITH_RECIPIENT@email.gov", "daniel.greb@nist.gov"]
   },
   "retention_days": 90,
   "file_naming": {

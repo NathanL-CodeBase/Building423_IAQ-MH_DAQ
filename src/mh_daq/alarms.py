@@ -32,7 +32,7 @@ logger = logging.getLogger("mh_daq.alarms")
 class EmailSender:
     """Interface for sending alarm emails."""
 
-    def send(self, subject, body):
+    def send(self, subject, body, to_addrs=None):
         raise NotImplementedError
 
 
@@ -54,11 +54,12 @@ class SmtpEmailSender(EmailSender):
         self._to = list(to_addrs)
         self._timeout = timeout
 
-    def send(self, subject, body):
+    def send(self, subject, body, to_addrs=None):
+        recipients = to_addrs if to_addrs is not None else self._to
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = self._from
-        msg["To"] = ", ".join(self._to)
+        msg["To"] = ", ".join(recipients)
         msg.set_content(body)
         with smtplib.SMTP(self._host, self._port, timeout=self._timeout) as s:
             s.send_message(msg)
@@ -70,8 +71,8 @@ class RecordingEmailSender(EmailSender):
     def __init__(self):
         self.sent = []
 
-    def send(self, subject, body):
-        self.sent.append((subject, body))
+    def send(self, subject, body, to_addrs=None):
+        self.sent.append((subject, body, to_addrs))
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +205,7 @@ class AlarmEngine:
                     self._emit(
                         f"ALARM: {rule.description}",
                         self._trip_body(rule, value, now),
+                        to_addrs=rule.email_to,
                     )
                 )
             elif (
@@ -216,6 +218,7 @@ class AlarmEngine:
                     self._emit(
                         f"ALARM ONGOING: {rule.description}",
                         self._trip_body(rule, value, now, ongoing=True),
+                        to_addrs=rule.email_to,
                     )
                 )
         else:
@@ -226,6 +229,7 @@ class AlarmEngine:
                         f"CLEARED: {rule.description}",
                         f"{rule.description} cleared at {now:%Y-%m-%d %H:%M:%S}. "
                         f"{rule.channel} = {value:.2f} {rule.unit} on {self._machine}.",
+                        to_addrs=rule.email_to,
                     )
                 )
             st.condition_since = None
@@ -276,11 +280,11 @@ class AlarmEngine:
             f"Machine {self._machine}."
         )
 
-    def _emit(self, subject_suffix, body):
+    def _emit(self, subject_suffix, body, to_addrs=None):
         subject = f"[MH DAQ] {subject_suffix}"
         if self._email_enabled:
             try:
-                self._sender.send(subject, body)
+                self._sender.send(subject, body, to_addrs=to_addrs)
             except Exception:
                 logger.exception("Failed to send alarm email: %s", subject)
         logger.info("Alarm event: %s", subject)
