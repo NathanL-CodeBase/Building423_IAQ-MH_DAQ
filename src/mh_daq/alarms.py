@@ -13,10 +13,20 @@ Created: 2026-09-25
 Update log:
     2026-09-25: Initial version. Threshold rules (dwell, trip/clear/re-notify),
         frozen detection, dropout watchdog, SMTP and recording senders.
+    2026-11-09: Rules honor an active window; a rule tripped when its window
+        ends gets a closing email. set_rules swaps rules and recipients under
+        a lock for live reload, keeping state for unchanged rules.
+        check_mission emails once when Mission stays unreachable past
+        quality.mission_outage_s and once when it returns. notify sends a
+        plain system message (config reload errors).
+    2026-11-09: Add QueuedEmailSender, which sends on a background thread
+        so a slow or hung SMTP server never stalls the 1 Hz indoor loop.
 """
 
 import logging
+import queue
 import smtplib
+import threading
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime
@@ -63,6 +73,70 @@ class SmtpEmailSender(EmailSender):
         msg.set_content(body)
         with smtplib.SMTP(self._host, self._port, timeout=self._timeout) as s:
             s.send_message(msg)
+
+
+class QueuedEmailSender(EmailSender):
+    """Send through another sender on a background thread.
+
+    send() only enqueues, so the caller (the indoor loop, holding the alarm
+    lock) returns at once even when the SMTP server takes its full timeout.
+    Messages go out in order on one worker thread. A failed send is logged
+    and dropped, as before. If the queue fills (the server down through a
+    long burst of alarms), the newest message is dropped and logged.
+
+    Parameters
+    ----------
+    inner : EmailSender
+        Does the actual sending (SmtpEmailSender in production).
+    maxsize : int
+        Queue limit.
+    """
+
+    _STOP = object()
+
+    def __init__(self, inner, maxsize=200):
+        self._inner = inner
+        self._q = queue.Queue(maxsize=maxsize)
+        self._thread = threading.Thread(target=self._run, name="email", daemon=True)
+        self._thread.start()
+
+    def send(self, subject, body, to_addrs=None):
+        try:
+            self._q.put_nowait((subject, body, to_addrs))
+        except queue.Full:
+            logger.error("Email queue full; dropped: %s", subject)
+
+    def pending(self):
+        """Approximate number of messages waiting to send."""
+        return self._q.qsize()
+
+    def _run(self):
+        while True:
+            item = self._q.get()
+            try:
+                if item is self._STOP:
+                    return
+                subject, body, to_addrs = item
+                try:
+                    self._inner.send(subject, body, to_addrs=to_addrs)
+                except Exception:
+                    logger.exception("Failed to send alarm email: %s", subject)
+            finally:
+                self._q.task_done()
+
+    def close(self, timeout=60.0):
+        """Send what is queued, then stop the worker. Waits up to timeout s.
+
+        Called at shutdown so a final alarm or clear email is not lost.
+        """
+        try:
+            self._q.put(self._STOP, timeout=1.0)
+        except queue.Full:
+            logger.error("Email queue full at shutdown; %d message(s) dropped.", self._q.qsize())
+            return
+        self._thread.join(timeout)
+        if self._thread.is_alive():
+            logger.warning("Email worker still sending after %.0f s at shutdown.", timeout)
 
 
 class RecordingEmailSender(EmailSender):
@@ -112,10 +186,62 @@ class AlarmEngine:
         self._frozen = set()
         self._last_record_time = None
         self._dropout_active = False
+        self._mission_down_since = None
+        self._mission_alarm_active = False
+        # check() runs on the indoor thread and set_rules() on the config
+        # watcher thread; the lock keeps a rule list and its state in step.
+        self._lock = threading.RLock()
 
     @staticmethod
     def _key(rule):
         return f"{rule.channel}|{rule.description}"
+
+    def set_rules(self, rules, rule_email_map=None):
+        """Replace the threshold rules and per-rule recipients (live reload).
+
+        A rule whose key and definition are unchanged keeps its trip state and
+        dwell timer, so a reload in the middle of an alarm does not resend the
+        trip email. A changed or new rule starts clear. A removed rule that was
+        tripped gets a closing email.
+
+        Returns
+        -------
+        list of str
+            Event descriptions for the log.
+        """
+        pending = []
+        with self._lock:
+            old = {self._key(r): r for r in self._rules}
+            new_state = {}
+            for r in rules:
+                k = self._key(r)
+                if k in old and old[k] == r:
+                    new_state[k] = self._state[k]
+                else:
+                    new_state[k] = RuleState()
+            for k, r in old.items():
+                st = self._state.get(k)
+                if st and st.tripped and new_state.get(k) is not st:
+                    pending.append((r, self._rule_email_map.get(r.description)))
+            self._rules = list(rules)
+            self._state = new_state
+            if rule_email_map is not None:
+                self._rule_email_map = dict(rule_email_map)
+        # Send outside the lock: SMTP can block up to its 30 s timeout, and the
+        # indoor loop needs the lock every second.
+        return [
+            self._emit(
+                f"ALARM RULE CHANGED: {r.description}",
+                f"{r.description} was tripped when its rule was edited or removed "
+                f"from config on {self._machine}. It restarts from clear.",
+                to_addrs=to,
+            )
+            for r, to in pending
+        ]
+
+    def notify(self, subject_suffix, body):
+        """Send a system message to the default recipients. Returns the subject."""
+        return self._emit(subject_suffix, body)
 
     # -- public API --
     def check(self, si_values, now):
@@ -132,14 +258,60 @@ class AlarmEngine:
         list of str
             Human-readable event descriptions for logging and the snapshot.
         """
-        self._last_record_time = now
-        for ch, v in si_values.items():
-            self._history[ch].append(v)
+        with self._lock:
+            self._last_record_time = now
+            for ch, v in si_values.items():
+                self._history[ch].append(v)
 
+            events = []
+            for rule in self._rules:
+                events += self._check_rule(rule, si_values, now)
+            events += self._check_frozen(now)
+            return events
+
+    def check_mission(self, available, now):
+        """Email when Mission stays unreachable past quality.mission_outage_s.
+
+        One email when the outage passes the limit and one when Mission comes
+        back; short outages send nothing. available is the mirror's last
+        reachability result; None (no tick yet) is ignored.
+
+        Returns event descriptions.
+        """
+        limit = self._q.mission_outage_s
+        if available is None or limit <= 0:
+            return []
         events = []
-        for rule in self._rules:
-            events += self._check_rule(rule, si_values, now)
-        events += self._check_frozen(now)
+        if not available:
+            if self._mission_down_since is None:
+                self._mission_down_since = now
+            down_s = (now - self._mission_down_since).total_seconds()
+            if down_s >= limit and not self._mission_alarm_active:
+                self._mission_alarm_active = True
+                events.append(
+                    self._emit(
+                        "MISSION UNREACHABLE",
+                        f"{self._machine} has not reached Mission since "
+                        f"{self._mission_down_since:%Y-%m-%d %H:%M:%S} ({down_s / 3600:.1f} h, "
+                        f"limit {limit / 3600:.1f} h). Data keeps logging locally and "
+                        f"copies to Mission when access returns. The dashboard shows "
+                        f"stale values until then.",
+                    )
+                )
+        else:
+            if self._mission_alarm_active:
+                down_s = (now - self._mission_down_since).total_seconds()
+                events.append(
+                    self._emit(
+                        "MISSION REACHABLE AGAIN",
+                        f"{self._machine} reached Mission at {now:%Y-%m-%d %H:%M:%S} after "
+                        f"{down_s / 3600:.1f} h (unreachable from "
+                        f"{self._mission_down_since:%Y-%m-%d %H:%M:%S}). The backlog copies "
+                        f"on the next mirror ticks.",
+                    )
+                )
+            self._mission_alarm_active = False
+            self._mission_down_since = None
         return events
 
     def check_dropout(self, now):
@@ -173,17 +345,36 @@ class AlarmEngine:
 
     def current_state(self):
         """Return a small dict of current alarm state for the snapshot."""
-        return {
-            "tripped_rules": [
-                self._key(r) for r in self._rules if self._state[self._key(r)].tripped
-            ],
-            "frozen_channels": sorted(self._frozen),
-            "dropout": self._dropout_active,
-        }
+        with self._lock:
+            return {
+                "tripped_rules": [
+                    self._key(r) for r in self._rules if self._state[self._key(r)].tripped
+                ],
+                "frozen_channels": sorted(self._frozen),
+                "dropout": self._dropout_active,
+                "mission_outage": self._mission_alarm_active,
+            }
 
     # -- rule evaluation --
     def _check_rule(self, rule, si_values, now):
         st = self._state[self._key(rule)]
+        to_addrs = self._rule_email_map.get(rule.description)
+
+        if not rule.is_active(now):
+            events = []
+            if st.tripped:
+                events.append(
+                    self._emit(
+                        f"ALARM WINDOW ENDED: {rule.description}",
+                        f"{rule.description} was still tripped when its window ended at "
+                        f"{now:%Y-%m-%d %H:%M:%S} ({rule.window_text()}) on {self._machine}.",
+                        to_addrs=to_addrs,
+                    )
+                )
+            st.tripped = False
+            st.condition_since = None
+            return events
+
         value = si_values.get(rule.channel)
         if value is None:
             return []
@@ -195,7 +386,6 @@ class AlarmEngine:
             cond = True
 
         events = []
-        to_addrs = self._rule_email_map.get(rule.description)
         if cond:
             if st.condition_since is None:
                 st.condition_since = now
@@ -274,12 +464,14 @@ class AlarmEngine:
 
     def _trip_body(self, rule, value, now, ongoing=False):
         state = "still tripped" if ongoing else "tripped"
+        window = rule.window_text()
         return (
             f"{rule.description} {state} at {now:%Y-%m-%d %H:%M:%S}.\n"
             f"{rule.channel} = {value:.2f} {rule.unit}, "
             f"threshold {self._threshold_text(rule)}, "
             f"dwell {rule.dwell_s:.0f} s.\n"
-            f"Machine {self._machine}."
+            + (f"Temporary rule, {window}.\n" if window else "")
+            + f"Machine {self._machine}."
         )
 
     def _emit(self, subject_suffix, body, to_addrs=None):

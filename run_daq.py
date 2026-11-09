@@ -11,6 +11,8 @@ Author: Nathan Lima
 Created: 2026-09-25
 Update log:
     2026-09-25: Initial version.
+    2026-11-09: Send alarm email through QueuedEmailSender and flush it on
+        shutdown.
 
 Usage:
     python run_daq.py --sim         # simulator, safe anywhere
@@ -23,7 +25,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from src.mh_daq.alarms import AlarmEngine, SmtpEmailSender
+from src.mh_daq.alarms import AlarmEngine, QueuedEmailSender, SmtpEmailSender
 from src.mh_daq.backends import NiDaqmxBackend, SimulationBackend
 from src.mh_daq.config import load_config
 from src.mh_daq.daemon import AcquisitionDaemon
@@ -106,17 +108,23 @@ def main():
         config, writer, source_factory=build_serial_factory(config, sim=args.sim)
     )
     mirror = MissionMirror(config)
-    sender = SmtpEmailSender(
-        config.local.smtp_host,
-        config.local.smtp_port,
-        config.local.smtp_from,
-        config.local.smtp_to,
+    # Queued so an SMTP stall never holds up the 1 Hz indoor loop.
+    sender = QueuedEmailSender(
+        SmtpEmailSender(
+            config.local.smtp_host,
+            config.local.smtp_port,
+            config.local.smtp_from,
+            config.local.smtp_to,
+        )
     )
     alarms = AlarmEngine(config, sender)
 
     sup = Supervisor(config, indoor, outdoor, mirror, alarms)
     log.info("Starting MH DAQ. Ctrl+C to stop.")
-    sup.run_forever()
+    try:
+        sup.run_forever()
+    finally:
+        sender.close()
 
 
 if __name__ == "__main__":

@@ -23,6 +23,15 @@ Update log:
     2026-10-08: Read from Mission when MH_DAQ_SOURCE=mission, with the
         snapshot and heartbeat from mission_snapshot_dir. Serve health
         thresholds per source through /api/channels.
+    2026-11-09: Default trends are living-room T and RH. Trends accept AIO 2
+        columns beside indoor channels. /api/channels serves offline tags and
+        the stale-banner age. Weather endpoints serve only columns with a
+        sensor, add a gust (bucket max) series and a wind-direction vector
+        mean, and reach the LabVIEW-era files before the cutover. Downloads
+        are capped at web.max_download_days. In mission mode a background
+        watchdog emails when the Mission heartbeat goes stale.
+    2026-11-09: Re-read channel_status when daq_config.json changes and
+        send the offline tags with each snapshot.
 
 Usage (from repo root, mh_daq_web env, PowerShell):
     # DAQ PC or sim machine (default): reads config.local.local_data_dir
@@ -40,10 +49,18 @@ Data source by environment variable:
     MH_DAQ_DATA_ROOT   Local mode only: a folder holding latest_snapshot.json,
                        heartbeat.json, and YYYY/ daily files. Defaults to
                        config.local.local_data_dir.
+    MH_DAQ_WATCHDOG    '1' or '0' forces the stale-heartbeat email watchdog on
+                       or off. Default: on in mission mode only, because in
+                       local mode the dashboard sits on the DAQ PC and goes
+                       down with it.
 """
 
 import io
 import json
+import logging
+import os
+import threading
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -52,18 +69,51 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.mh_daq.config import load_config
+from src.mh_daq.alarms import SmtpEmailSender
+from src.mh_daq.config import ConfigError, load_channel_status, load_config
 from src.mh_daq.scaling import si_units_by_channel
 from web.data_access import (
     data_source,
     downsample,
-    numeric_columns,
     parse_iso_naive,
     read_span,
     snapshot_root,
 )
+from web.watchdog import StaleWatchdog
 
-app = FastAPI(title="MH DAQ Group Dashboard")
+logger = logging.getLogger("mh_daq.web")
+
+
+def _watchdog_enabled():
+    flag = os.environ.get("MH_DAQ_WATCHDOG", "").strip()
+    if flag in ("0", "1"):
+        return flag == "1"
+    return data_source() == "mission"
+
+
+@asynccontextmanager
+async def _lifespan(app):
+    """Start the stale-heartbeat watchdog thread with the server."""
+    wd = None
+    if _watchdog_enabled():
+        loc = _config.local
+        sender = SmtpEmailSender(loc.smtp_host, loc.smtp_port, loc.smtp_from, loc.smtp_to)
+        wd = StaleWatchdog(
+            _heartbeat_path,
+            sender,
+            alarm_s=_config.web.stale_alarm_s,
+            renotify_s=_config.web.stale_renotify_s,
+            machine=loc.machine_name,
+        )
+        threading.Thread(
+            target=wd.run_loop, args=(_config.web.watchdog_check_s,), name="watchdog", daemon=True
+        ).start()
+    yield
+    if wd is not None:
+        wd.stop()
+
+
+app = FastAPI(title="MH DAQ Group Dashboard", lifespan=_lifespan)
 
 # Pages, their scripts, and vendored Plotly are all served locally, so the
 # site has no external CDN dependency on an internal server with no outbound web.
@@ -76,9 +126,47 @@ _DISPLAY_RANGES = {
     ch: {"low": dr.low, "high": dr.high} for dr in _config.display_ranges for ch in dr.channels
 }
 
+def _offline_map(offline):
+    return {o.channel: {"reason": o.reason, "since": o.since} for o in offline}
+
+
+# Offline tags re-read when daq_config.json changes, so tagging a channel on
+# this machine needs no dashboard restart. A bad edit keeps the last good map.
+_offline_cache = {"mtime": None, "map": _offline_map(_config.offline_channels)}
+_offline_lock = threading.Lock()
+
+
+def _offline():
+    """Return the current offline map, re-reading channel_status on file change."""
+    try:
+        mtime = _config.committed_path.stat().st_mtime
+    except (AttributeError, OSError):
+        return _offline_cache["map"]
+    with _offline_lock:
+        if _offline_cache["mtime"] is None:
+            _offline_cache["mtime"] = mtime
+        elif mtime != _offline_cache["mtime"]:
+            _offline_cache["mtime"] = mtime
+            try:
+                offline, _events = load_channel_status(_config)
+                _offline_cache["map"] = _offline_map(offline)
+            except ConfigError as e:
+                logger.error("channel_status reload rejected; keeping last tags. %s", e)
+        return _offline_cache["map"]
+
+# AIO 2 columns with a sensor behind them (rain and solar have none), keyed by
+# file header. The header is also the trend channel name for outdoor series.
+_OUTDOOR_COLS = [c for c in _config.aio2.output_columns if c.present]
+_OUTDOOR_UNITS = {c.header: c.si_unit for c in _OUTDOOR_COLS}
+_OUTDOOR_HEADER = {c.field: c.header for c in _OUTDOOR_COLS}
+_WIND_DIR = _OUTDOOR_HEADER.get("wind_direction")
+_WIND_SPEED = _OUTDOOR_HEADER.get("wind_speed")
+# Sensor diagnostics stay in the download but off the weather page plots.
+_WEATHER_PLOT_EXCLUDE = {"battery_voltage", "compass_heading"}
+
 # Trend channels shown before the user picks any. Served to the page through
 # /api/channels so the page and the API share one list.
-_DEFAULT_TREND_CHANNELS = ["T_Liv_M4_C7", "T_Gar_M5_C4", "RH_Liv_M3_C3", "6V_Test_M2_C7"]
+_DEFAULT_TREND_CHANNELS = ["T_Liv_M4_C7", "RH_Liv_M3_C3"]
 
 # Heartbeat age, in seconds, past which the page shows yellow (delayed) and red
 # (down). Local reads see the heartbeat within seconds. Mission reads lag the
@@ -90,6 +178,7 @@ _HEALTH = {
     "local": {"delayed_s": 5, "down_s": 60},
     "mission": {"delayed_s": 90, "down_s": 300},
 }[_SOURCE]
+_HEALTH["banner_s"] = _config.web.stale_banner_s
 
 
 def _snapshot_path():
@@ -113,6 +202,9 @@ def api_snapshot():
     except (OSError, json.JSONDecodeError):
         return JSONResponse({"available": False, "reason": f"No snapshot at {p}"}, status_code=200)
     snap["available"] = True
+    # Offline tags ride on the 3 s snapshot poll, so a config edit reaches an
+    # open page without a reload.
+    snap["offline"] = _offline()
     # Age in seconds, so the page can flag stale data.
     try:
         ts = datetime.fromisoformat(snap.get("timestamp"))
@@ -148,24 +240,39 @@ def api_heartbeat():
 
 @app.get("/api/channels")
 def api_channels():
-    """Return all indoor channels with SI units, the default trend set, the
-    card color ranges, and the health thresholds.
+    """Return all trend channels with SI units, the default trend set, the
+    card color ranges, the offline tags, and the health thresholds.
 
-    Used to build the picker and to label and color the cards. Units come
-    from the config scales, in task order. display_ranges maps a channel name
-    to {"low", "high"} (either may be null); channels without a range are
-    absent. health holds the heartbeat ages {"delayed_s", "down_s"} for the
+    Used to build the picker and to label and color the cards. Indoor units
+    come from the config scales, in task order; outdoor_channels lists the AIO
+    2 columns that have a sensor. display_ranges maps a channel name to
+    {"low", "high"} (either may be null); channels without a range are absent.
+    offline maps a channel to {"reason", "since"} for greyed cards. health
+    holds the heartbeat ages {"delayed_s", "down_s", "banner_s"} for the
     active data source.
     """
     items = [{"channel": name, "unit": unit} for name, unit in _UNITS.items()]
+    outdoor = [{"channel": h, "unit": u} for h, u in _OUTDOOR_UNITS.items()]
     return JSONResponse(
         {
             "channels": items,
+            "outdoor_channels": outdoor,
             "defaults": _DEFAULT_TREND_CHANNELS,
             "display_ranges": _DISPLAY_RANGES,
+            "offline": _offline(),
             "source": _SOURCE,
             "health": _HEALTH,
         }
+    )
+
+
+def _series(df, col, digits):
+    return df[col].round(digits).where(pd.notna(df[col]), None).tolist()
+
+
+def _downsample_outdoor(df, target, max_cols=()):
+    return downsample(
+        df, target_points=target, direction_col=_WIND_DIR, speed_col=_WIND_SPEED, max_cols=max_cols
     )
 
 
@@ -178,74 +285,117 @@ def api_trend(start: str = "", end: str = "", channels: str = "", target: int = 
     start, end : str
         ISO datetimes. If empty, end defaults to now and start to 30 min before.
     channels : str
-        Comma-separated plain channel names. Empty returns a small default set.
+        Comma-separated channel names: indoor channel names or AIO 2 column
+        headers. Empty returns the default set.
     target : int
         Approximate number of points to return per channel. The span is bucketed
         to hit this, so any window (a month or a minute) returns about this many.
 
     Returns
     -------
-    JSON: 'time' (ISO), one array per channel, 'units' per channel, and the
-    actual 'start'/'end' covered.
+    JSON: 'time' (ISO, indoor), 'time_outdoor' (ISO, AIO 2), one array per
+    channel, 'x_of' naming the time array of each outdoor channel, 'markers'
+    listing channels to draw as points (wind direction), 'units' per channel,
+    and the actual 'start'/'end' covered.
     """
     e = parse_iso_naive(end, datetime.now())
     s = parse_iso_naive(start, e - timedelta(minutes=30))
+    target = max(50, min(target, 10000))
 
     wanted = [c.strip() for c in channels.split(",") if c.strip()] or _DEFAULT_TREND_CHANNELS
-
-    df = read_span("indoor_si", s, e)
-    if df.empty:
-        return JSONResponse(
-            {
-                "available": False,
-                "time": [],
-                "units": {},
-                "start": s.isoformat(),
-                "end": e.isoformat(),
-            }
-        )
-
-    df = downsample(df, target_points=max(50, min(target, 10000)))
-
-    colmap = {}
-    for want in wanted:
-        match = [c for c in df.columns if c == want or c.startswith(want + "_")]
-        if match:
-            colmap[want] = match[0]
+    wanted_out = [c for c in wanted if c in _OUTDOOR_UNITS]
+    wanted_in = [c for c in wanted if c not in _OUTDOOR_UNITS]
 
     out = {
-        "available": True,
-        "time": [t.isoformat() for t in df["dt"]],
+        "available": False,
+        "time": [],
+        "time_outdoor": [],
+        "x_of": {},
+        "markers": [],
         "units": {},
         "start": s.isoformat(),
         "end": e.isoformat(),
     }
-    for want, col in colmap.items():
-        series = df[col].round(4).where(pd.notna(df[col]), None)
-        out[want] = series.tolist()
-        out["units"][want] = _UNITS.get(want, "")
+
+    if wanted_in:
+        df = read_span("indoor_si", s, e)
+        if not df.empty:
+            df = downsample(df, target_points=target)
+            out["time"] = [t.isoformat() for t in df["dt"]]
+            for want in wanted_in:
+                match = [c for c in df.columns if c == want or c.startswith(want + "_")]
+                if match:
+                    out[want] = _series(df, match[0], 4)
+                    out["units"][want] = _UNITS.get(want, "")
+                    out["available"] = True
+
+    if wanted_out:
+        dfo = read_span("outdoor", s, e)
+        if not dfo.empty:
+            dfo = _downsample_outdoor(dfo, target)
+            out["time_outdoor"] = [t.isoformat() for t in dfo["dt"]]
+            for want in wanted_out:
+                if want in dfo.columns:
+                    out[want] = _series(dfo, want, 3)
+                    out["units"][want] = _OUTDOOR_UNITS[want]
+                    out["x_of"][want] = "time_outdoor"
+                    out["available"] = True
+                    if want == _WIND_DIR:
+                        out["markers"].append(want)
     return JSONResponse(out)
 
 
 @app.get("/api/weather/columns")
 def api_weather_columns():
-    """Return the outdoor data column names available for selection."""
-    cols = [c.header for c in _config.aio2.output_columns]
-    return JSONResponse({"columns": cols})
+    """Return the AIO 2 columns that have a sensor, for the download list and plots.
+
+    Each entry is {header, field, unit, plot}; plot is false for sensor
+    diagnostics (battery voltage, compass heading), which stay downloadable.
+    Also returns the download limits and the earliest data date.
+    """
+    lo = _config.legacy_outdoor
+    cols = [
+        {
+            "header": c.header,
+            "field": c.field,
+            "unit": c.si_unit,
+            "plot": c.field not in _WEATHER_PLOT_EXCLUDE,
+        }
+        for c in _OUTDOOR_COLS
+    ]
+    return JSONResponse(
+        {
+            "columns": cols,
+            "max_download_days": _config.web.max_download_days,
+            "first_date": lo.first_date if lo else None,
+            "cutover_local": lo.cutover_local.isoformat(sep=" ") if lo else None,
+        }
+    )
 
 
 @app.get("/api/weather/series")
 def api_weather_series(hours: int = 24):
-    """Return recent outdoor data for plotting, downsampled for long spans."""
+    """Return recent outdoor data for plotting, downsampled for long spans.
+
+    Returns the plotted columns keyed by header, 'fields' mapping field name to
+    header, and 'gust' (bucket max of wind speed). Wind direction is a
+    speed-weighted vector mean per bucket. hours is clamped to 1 to 168.
+    """
+    hours = max(1, min(int(hours), 168))
     now = datetime.now()
-    start = now - timedelta(hours=hours)
-    df = read_span("outdoor", start, now)
+    df = read_span("outdoor", now - timedelta(hours=hours), now)
     if df.empty:
         return JSONResponse({"available": False, "time": []})
-    df = downsample(df, target_points=3000)
-    out = {"available": True, "time": [t.isoformat() for t in df["dt"]]}
-    for c in numeric_columns(df):
-        out[c] = df[c].round(3).where(pd.notna(df[c]), None).tolist()
+    max_cols = [_WIND_SPEED] if _WIND_SPEED else []
+    df = _downsample_outdoor(df, 3000, max_cols=max_cols)
+    out = {"available": True, "time": [t.isoformat() for t in df["dt"]], "fields": {}}
+    for c in _OUTDOOR_COLS:
+        if c.field in _WEATHER_PLOT_EXCLUDE or c.header not in df.columns:
+            continue
+        out[c.header] = _series(df, c.header, 3)
+        out["fields"][c.field] = c.header
+    if _WIND_SPEED and f"{_WIND_SPEED}_max" in df.columns:
+        out["gust"] = _series(df, f"{_WIND_SPEED}_max", 3)
     return JSONResponse(out)
 
 
@@ -276,11 +426,14 @@ def api_weather_download(start: str = "", end: str = "", vars: str = ""):
     start, end : str
         ISO dates (YYYY-MM-DD) or datetimes. Empty start/end defaults to today.
     vars : str
-        Comma-separated column headers to include. Empty means all.
+        Comma-separated column headers to include. Empty means every column
+        with a sensor; rain and solar are never included.
 
     Returns
     -------
-    CSV with a single ISO 'datetime' column plus the selected data columns.
+    CSV with a single ISO 'datetime' column plus the selected data columns,
+    in file order. Before the cutover only the five LabVIEW-era columns hold
+    values. A range longer than web.max_download_days returns HTTP 400.
     """
     now = datetime.now()
     s = parse_iso_naive(start, datetime(now.year, now.month, now.day))
@@ -289,13 +442,19 @@ def api_weather_download(start: str = "", end: str = "", vars: str = ""):
     if end and len(end) <= 10:
         e = e + timedelta(days=1) - timedelta(seconds=1)
 
+    max_days = _config.web.max_download_days
+    if (e - s).total_seconds() > max_days * 86400:
+        return PlainTextResponse(
+            f"Range too long: at most {max_days} days per download.", status_code=400
+        )
+
     df = read_span("outdoor", s, e)
     if df.empty:
         return PlainTextResponse("datetime\n", media_type="text/csv")
 
-    all_cols = numeric_columns(df)
-    wanted = [c.strip() for c in vars.split(",") if c.strip()] or all_cols
-    keep = [c for c in wanted if c in df.columns]
+    allowed = [h for h in _OUTDOOR_UNITS if h in df.columns]
+    wanted = [c.strip() for c in vars.split(",") if c.strip()] or allowed
+    keep = [c for c in wanted if c in allowed]
 
     out = pd.DataFrame({"datetime": df["dt"].map(lambda t: t.isoformat())})
     for c in keep:

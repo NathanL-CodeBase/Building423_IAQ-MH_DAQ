@@ -19,11 +19,19 @@ Update log:
         Windows editor does not stop the daemon at startup.
     2026-10-08: Flag the SMTP host and port placeholders from the generic
         template with a clear message instead of an int() error.
+    2026-11-09: Parse channel_status (dashboard offline tags and sensor
+        events), legacy_outdoor (LabVIEW-era weather files), and web (stale
+        banner, watchdog, download cap). Carry the AIO 2 present flag.
+    2026-11-09: Alarm rules take a category and an optional active window.
+        load_dynamic re-reads alarms.rules, channel_status, and
+        alarm_rule_email for live reload; a fingerprint of the other sections
+        flags edits that still need a restart. Add quality.mission_outage_s.
 """
 
 import json
 import os
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -87,6 +95,9 @@ class Aio2OutputColumn:
     field: str
     header: str
     si_unit: str
+    # False when no sensor feeds the field (rain, solar). The writer still logs
+    # the column; the web pages hide it.
+    present: bool = True
 
 
 @dataclass
@@ -102,12 +113,38 @@ class Aio2Config:
 
 @dataclass(frozen=True)
 class AlarmRule:
+    """Threshold rule on one channel.
+
+    A temporary rule (a test-specific limit) sets active_from and active_until
+    in local time; outside that window it never trips. A standing rule leaves
+    both None and is always active.
+    """
+
     channel: str
     description: str
     dwell_s: float
     unit: str
     high: Optional[float] = None
     low: Optional[float] = None
+    category: str = "standing"
+    active_from: Optional[datetime] = None
+    active_until: Optional[datetime] = None
+
+    def is_active(self, now):
+        """Return True if now falls inside the rule's window (inclusive)."""
+        if self.active_from is not None and now < self.active_from:
+            return False
+        if self.active_until is not None and now > self.active_until:
+            return False
+        return True
+
+    def window_text(self):
+        """Return 'active 2026-11-18 00:00 to 2026-11-21 23:59', or '' if always on."""
+        if self.active_from is None and self.active_until is None:
+            return ""
+        a = f"{self.active_from:%Y-%m-%d %H:%M}" if self.active_from else "start"
+        b = f"{self.active_until:%Y-%m-%d %H:%M}" if self.active_until else "no end"
+        return f"active {a} to {b}"
 
 
 @dataclass(frozen=True)
@@ -125,11 +162,62 @@ class DisplayRange:
     high: Optional[float] = None
 
 
+@dataclass(frozen=True)
+class OfflineChannel:
+    """A channel the dashboard shows greyed out. Display only."""
+
+    channel: str
+    reason: str = ""
+    since: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ChannelEvent:
+    """A recorded sensor connection, removal, or swap (local time)."""
+
+    time_local: str
+    channel: str
+    event: str
+    note: str = ""
+
+
+@dataclass
+class LegacyOutdoorConfig:
+    """Where the LabVIEW-era AIO 2 files sit on Mission, and the cutover."""
+
+    cutover_local: datetime
+    mission_subdir: str
+    file_naming: str
+    first_date: Optional[str] = None
+
+
+@dataclass
+class WebConfig:
+    stale_banner_s: float = 3600.0
+    stale_alarm_s: float = 86400.0
+    stale_renotify_s: float = 86400.0
+    watchdog_check_s: float = 300.0
+    max_download_days: int = 31
+
+
 @dataclass
 class QualityConfig:
     dropout_s: float
     stale_s: float
     frozen_count: int
+    # Mission unreachable this long before the daemon emails; 0 disables.
+    mission_outage_s: float = 7200.0
+
+
+@dataclass
+class DynamicConfig:
+    """The parts of config the running daemon re-reads without a restart."""
+
+    alarm_rules: list
+    offline_channels: list
+    channel_events: list
+    alarm_rule_email: dict
+    static_fingerprint: str
 
 
 @dataclass
@@ -184,6 +272,16 @@ class SystemConfig:
     mirror: MirrorConfig
     local: LocalConfig
     display_ranges: list = field(default_factory=list)  # DisplayRange
+    offline_channels: list = field(default_factory=list)  # OfflineChannel
+    channel_events: list = field(default_factory=list)  # ChannelEvent
+    legacy_outdoor: Optional[LegacyOutdoorConfig] = None
+    web: WebConfig = field(default_factory=WebConfig)
+    # Files this config came from, so the daemon and dashboard can re-read the
+    # reloadable sections. None when built in memory.
+    committed_path: Optional[Path] = None
+    local_path: Optional[Path] = None
+    # Hash of every committed section that needs a restart to take effect.
+    static_fingerprint: str = ""
 
     def channel_names(self):
         """Return channel names in acquisition (task) order."""
@@ -283,8 +381,145 @@ def load_config(config_dir=None):
     local = _load_json(local_path)
 
     cfg = _parse(committed, local)
+    cfg.committed_path = Path(committed_path)
+    cfg.local_path = Path(local_path)
+    cfg.static_fingerprint = _static_fingerprint(committed)
     _validate(cfg)
     return cfg
+
+
+# Committed sections the daemon applies on the fly. Everything else (channel
+# map, scales, timing, AIO 2, mirror, quality limits) needs a restart.
+_DYNAMIC_KEYS = ("channel_status",)
+
+
+def _static_fingerprint(committed):
+    """Return a stable hash of the committed sections that need a restart.
+
+    alarms.rules and channel_status are excluded because they reload live.
+    """
+    import hashlib
+
+    static = {k: v for k, v in committed.items() if k not in _DYNAMIC_KEYS}
+    alarms = dict(static.get("alarms", {}))
+    alarms.pop("rules", None)
+    static["alarms"] = alarms
+    text = json.dumps(static, sort_keys=True)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def load_dynamic(cfg):
+    """Re-read the reloadable sections from the files cfg was loaded from.
+
+    Reads alarms.rules and channel_status from daq_config.json and
+    alarm_rule_email from daq_local.json, and validates them against the
+    running channel map (which does not reload).
+
+    Parameters
+    ----------
+    cfg : SystemConfig
+        The config the process started with; must carry committed_path and
+        local_path.
+
+    Returns
+    -------
+    DynamicConfig
+
+    Raises
+    ------
+    ConfigError
+        If either file is unreadable or the new sections fail validation. The
+        caller keeps the sections it already has.
+    """
+    if cfg.committed_path is None or cfg.local_path is None:
+        raise ConfigError("Config was not loaded from files; nothing to reload.")
+    try:
+        committed = _load_json(cfg.committed_path)
+        local = _load_json(cfg.local_path)
+    except OSError as e:
+        raise ConfigError(f"Could not read config for reload: {e}") from e
+    try:
+        rules = _parse_rules(committed)
+        offline, events = _parse_channel_status(committed)
+    except (KeyError, TypeError, ValueError) as e:
+        raise ConfigError(f"Config validation failed:\n  - malformed entry: {e!r}") from e
+    problems = _rule_problems(rules, set(cfg.channel_names()))
+    problems += _channel_status_problems(offline, events, set(cfg.channel_names()))
+    if problems:
+        raise ConfigError("Config validation failed:\n  - " + "\n  - ".join(problems))
+    return DynamicConfig(
+        alarm_rules=rules,
+        offline_channels=offline,
+        channel_events=events,
+        alarm_rule_email=dict(local.get("alarm_rule_email", {})),
+        static_fingerprint=_static_fingerprint(committed),
+    )
+
+
+def _parse_local_time(value, what):
+    """Parse 'YYYY-MM-DD HH:MM:SS' (or None) for config time fields."""
+    if value is None:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+    except (TypeError, ValueError):
+        raise ConfigError(
+            f"Config validation failed:\n  - {what} {value!r} is not YYYY-MM-DD HH:MM:SS."
+        ) from None
+
+
+def _parse_rules(committed):
+    return [
+        AlarmRule(
+            channel=r["channel"],
+            description=r["description"],
+            dwell_s=float(r["dwell_s"]),
+            unit=r["unit"],
+            high=r.get("high"),
+            low=r.get("low"),
+            category=r.get("category", "standing"),
+            active_from=_parse_local_time(
+                r.get("active_from"), f"Alarm rule '{r['description']}' active_from"
+            ),
+            active_until=_parse_local_time(
+                r.get("active_until"), f"Alarm rule '{r['description']}' active_until"
+            ),
+        )
+        for r in committed["alarms"]["rules"]
+    ]
+
+
+def _parse_channel_status(committed):
+    status = committed.get("channel_status", {})
+    offline = [
+        OfflineChannel(channel=o["channel"], reason=o.get("reason", ""), since=o.get("since"))
+        for o in status.get("offline", [])
+    ]
+    events = [
+        ChannelEvent(
+            time_local=e["time_local"],
+            channel=e["channel"],
+            event=e["event"],
+            note=e.get("note", ""),
+        )
+        for e in status.get("events", [])
+    ]
+    return offline, events
+
+
+def load_channel_status(cfg):
+    """Re-read channel_status only, for the dashboard. Raises ConfigError."""
+    if cfg.committed_path is None:
+        raise ConfigError("Config was not loaded from files; nothing to reload.")
+    try:
+        committed = _load_json(cfg.committed_path)
+        offline, events = _parse_channel_status(committed)
+    except (OSError, KeyError, TypeError, ValueError) as e:
+        raise ConfigError(f"Could not reload channel_status: {e!r}") from e
+    problems = _channel_status_problems(offline, events, set(cfg.channel_names()))
+    if problems:
+        raise ConfigError("Config validation failed:\n  - " + "\n  - ".join(problems))
+    return offline, events
 
 
 def _parse(committed, local):
@@ -338,7 +573,12 @@ def _parse(committed, local):
         stopbits=int(a["stopbits"]),
         field_names=list(a["field_names"]),
         output_columns=[
-            Aio2OutputColumn(field=col["field"], header=col["header"], si_unit=col["si_unit"])
+            Aio2OutputColumn(
+                field=col["field"],
+                header=col["header"],
+                si_unit=col["si_unit"],
+                present=bool(col.get("present", True)),
+            )
             for col in a["output_columns"]
         ],
         description=a.get("description", ""),
@@ -349,19 +589,10 @@ def _parse(committed, local):
         dropout_s=float(q["dropout_s"]),
         stale_s=float(q["stale_s"]),
         frozen_count=int(q["frozen_count"]),
+        mission_outage_s=float(q.get("mission_outage_s", 7200)),
     )
 
-    rules = [
-        AlarmRule(
-            channel=r["channel"],
-            description=r["description"],
-            dwell_s=float(r["dwell_s"]),
-            unit=r["unit"],
-            high=r.get("high"),
-            low=r.get("low"),
-        )
-        for r in committed["alarms"]["rules"]
-    ]
+    rules = _parse_rules(committed)
 
     def _opt_float(v):
         return None if v is None else float(v)
@@ -376,6 +607,27 @@ def _parse(committed, local):
         )
         for r in committed.get("display_ranges", {}).get("rules", [])
     ]
+
+    offline_channels, channel_events = _parse_channel_status(committed)
+
+    legacy_outdoor = None
+    lo = committed.get("legacy_outdoor")
+    if lo:
+        legacy_outdoor = LegacyOutdoorConfig(
+            cutover_local=_parse_local_time(lo["cutover_local"], "legacy_outdoor cutover_local"),
+            mission_subdir=lo["mission_subdir"],
+            file_naming=lo["file_naming"],
+            first_date=lo.get("first_date"),
+        )
+
+    w = committed.get("web", {})
+    web = WebConfig(
+        stale_banner_s=float(w.get("stale_banner_s", 3600)),
+        stale_alarm_s=float(w.get("stale_alarm_s", 86400)),
+        stale_renotify_s=float(w.get("stale_renotify_s", 86400)),
+        watchdog_check_s=float(w.get("watchdog_check_s", 300)),
+        max_download_days=int(w.get("max_download_days", 31)),
+    )
 
     acq = committed["acquisition"]
     acquisition = AcquisitionConfig(
@@ -426,6 +678,10 @@ def _parse(committed, local):
         mirror=mirror,
         local=local_cfg,
         display_ranges=display_ranges,
+        offline_channels=offline_channels,
+        channel_events=channel_events,
+        legacy_outdoor=legacy_outdoor,
+        web=web,
     )
 
 
@@ -467,13 +723,9 @@ def _validate(cfg):
             problems.append(f"Channel '{c.name}' references unknown scale '{c.scale}'.")
 
     valid_channels = set(names)
-    for r in cfg.alarm_rules:
-        if r.channel not in valid_channels:
-            problems.append(f"Alarm rule '{r.description}' targets unknown channel '{r.channel}'.")
-        if r.high is None and r.low is None:
-            problems.append(f"Alarm rule '{r.description}' sets neither high nor low.")
-
+    problems += _rule_problems(cfg.alarm_rules, valid_channels)
     problems += _display_range_problems(cfg, valid_channels)
+    problems += _channel_status_problems(cfg.offline_channels, cfg.channel_events, valid_channels)
 
     if "REPLACE" in cfg.local.machine_name.upper():
         problems.append("machine_name in daq_local.json is still a placeholder.")
@@ -486,6 +738,50 @@ def _validate(cfg):
 
     if problems:
         raise ConfigError("Config validation failed:\n  - " + "\n  - ".join(problems))
+
+
+_RULE_CATEGORIES = ("standing", "temporary")
+
+
+def _rule_problems(rules, valid_channels):
+    """Return validation messages for alarm rules.
+
+    Shared by startup validation and live reload. Descriptions must be unique
+    because they key rule state and the per-rule email map.
+    """
+    problems = []
+    descs = [r.description for r in rules]
+    dupes = {d for d in descs if descs.count(d) > 1}
+    if dupes:
+        problems.append(f"Alarm rule descriptions repeat: {sorted(dupes)}.")
+    for r in rules:
+        if r.channel not in valid_channels:
+            problems.append(f"Alarm rule '{r.description}' targets unknown channel '{r.channel}'.")
+        if r.high is None and r.low is None:
+            problems.append(f"Alarm rule '{r.description}' sets neither high nor low.")
+        if r.category not in _RULE_CATEGORIES:
+            problems.append(
+                f"Alarm rule '{r.description}' category '{r.category}' is not one of {_RULE_CATEGORIES}."
+            )
+        if r.active_from and r.active_until and r.active_from >= r.active_until:
+            problems.append(f"Alarm rule '{r.description}' active_from is not before active_until.")
+    return problems
+
+
+def _channel_status_problems(offline, events, valid_channels):
+    """Return validation messages for channel_status offline tags and events."""
+    problems = []
+    names = [o.channel for o in offline]
+    for ch in names:
+        if ch not in valid_channels:
+            problems.append(f"channel_status offline lists unknown channel '{ch}'.")
+    dupes = {n for n in names if names.count(n) > 1}
+    if dupes:
+        problems.append(f"channel_status offline lists {sorted(dupes)} more than once.")
+    for e in events:
+        if e.channel not in valid_channels:
+            problems.append(f"channel_status event targets unknown channel '{e.channel}'.")
+    return problems
 
 
 def _display_range_problems(cfg, valid_channels):

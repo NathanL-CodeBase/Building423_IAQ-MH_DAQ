@@ -25,6 +25,7 @@
   },
   "alarm_rule_email": {
     "Garage over-temperature": ["REPLACE_WITH_RECIPIENT@email.gov", "REPLACE_WITH_RECIPIEN2@nist.gov"],
-    "Garage under-temperature": ["REPLACE_WITH_RECIPIENT@email.gov", "REPLACE_WITH_RECIPIEN2@nist.gov"]
+    "Garage under-temperature": ["REPLACE_WITH_RECIPIENT@email.gov", "REPLACE_WITH_RECIPIEN2@nist.gov"],
+    "Family room west dP low (ozone remediation)": ["REPLACE_WITH_RECIPIENT@email.gov", "REPLACE_WITH_RECIPIEN2@nist.gov"]
   }
 }

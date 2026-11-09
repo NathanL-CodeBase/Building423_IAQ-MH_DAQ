@@ -14,6 +14,7 @@ Update log:
     2026-09-25: Initial version.
     2026-10-02: Check that the snapshot carries alarm state, and that the
         heartbeat reports the mirror's reachability result.
+    2026-11-09: Alarm state now includes mission_outage.
 """
 
 import json
@@ -208,7 +209,7 @@ def test_supervisor_indoor_alarm_fires(config, tmp_path):
     # No email within 1.3 s (dwell 60 s), but the machinery ran without error.
     # Confirm the indoor path produced data and the snapshot carries alarm state.
     snap = json.loads((local / "latest_snapshot.json").read_text())
-    assert set(snap["alarms"]) == {"tripped_rules", "frozen_channels", "dropout"}
+    assert set(snap["alarms"]) == {"tripped_rules", "frozen_channels", "dropout", "mission_outage"}
     assert sender.sent == []
 
 

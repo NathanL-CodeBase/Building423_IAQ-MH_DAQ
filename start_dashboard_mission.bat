@@ -26,5 +26,8 @@ call "%CONDA_PATH%\Scripts\activate.bat" mh_daq_web
 REM The repo root is this file's folder, so no machine path is written here.
 cd /d "%~dp0"
 set MH_DAQ_SOURCE=mission
+REM Open the default browser once the server has had time to start. uvicorn
+REM blocks this window, so the open runs in a separate hidden process first.
+start "" /b powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 8; Start-Process 'http://127.0.0.1:8000'"
 python -m uvicorn web.dashboard:app --host 127.0.0.1 --port 8000
 pause

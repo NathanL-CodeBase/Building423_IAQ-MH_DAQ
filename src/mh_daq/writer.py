@@ -18,9 +18,14 @@ Update log:
     2026-10-08: Add atomic_write_json, which retries the replace while another
         handle holds the target open (WinError 5 on Windows). Shared with the
         heartbeat writer.
+    2026-11-09: The sidecar carries channel_status (offline tags and sensor
+        events). The rest of a day's sidecar is still written once; when the
+        status changes, or a restart finds an older sidecar, only the
+        channel_status key is replaced.
 """
 
 import json
+import logging
 import os
 import threading
 import time
@@ -29,6 +34,8 @@ from pathlib import Path
 
 from .config import ThermocoupleChannel, VoltageChannel
 from .scaling import si_unit_for_channel
+
+logger = logging.getLogger("mh_daq.writer")
 
 _DATE_FMT = "%m/%d/%Y"
 _TIME_FMT = "%H:%M:%S"
@@ -98,6 +105,21 @@ def _raw_header_name(channel):
     return f"{channel.name}_{_sanitize_unit(_raw_unit_for_channel(channel))}"
 
 
+def _channel_status_dict(offline, events):
+    """JSON form of channel_status for the sidecar."""
+    return {
+        "note": (
+            "offline: channels tagged offline on the dashboard (display only; "
+            "still logged). events: sensor connections and swaps, local time."
+        ),
+        "offline": [{"channel": o.channel, "since": o.since, "reason": o.reason} for o in offline],
+        "events": [
+            {"time_local": e.time_local, "channel": e.channel, "event": e.event, "note": e.note}
+            for e in events
+        ],
+    }
+
+
 def _sanitize_unit(unit):
     """Make a unit safe for a column name: no slashes or spaces.
 
@@ -132,6 +154,9 @@ class DailyWriter:
         self._raw_cols = [_raw_header_name(c) for c in config.channels]
         self._out_cols = [col.header for col in config.aio2.output_columns]
         self._out_fields = [col.field for col in config.aio2.output_columns]
+        self._channel_status = _channel_status_dict(
+            config.offline_channels, config.channel_events
+        )
 
     # -- paths --
     def _day_dir(self, date_str):
@@ -209,11 +234,52 @@ class DailyWriter:
                 {"field": c.field, "header": c.header, "si_unit": c.si_unit}
                 for c in self._config.aio2.output_columns
             ],
+            "channel_status": self._channel_status,
         }
-        path = self._day_dir(date_str) / f"{date_str}-MH_metadata.json"
+        path = self._sidecar_path(date_str)
         if not path.exists():
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(sidecar, f, indent=2)
+        else:
+            self._update_sidecar_status(date_str)
+
+    def _sidecar_path(self, date_str):
+        return self._day_dir(date_str) / f"{date_str}-MH_metadata.json"
+
+    def _update_sidecar_status(self, date_str):
+        """Replace only channel_status in an existing sidecar, if it differs.
+
+        The column descriptions stay as first written for the day, so a
+        restart never rewrites how the morning's columns were described.
+        """
+        path = self._sidecar_path(date_str)
+        try:
+            with open(path, encoding="utf-8") as f:
+                sidecar = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return
+        if sidecar.get("channel_status") == self._channel_status:
+            return
+        sidecar["channel_status"] = self._channel_status
+        try:
+            atomic_write_json(path, sidecar)
+        except OSError as e:
+            # Runs inside a data write on rollover; a held sidecar must not
+            # cost a record. The next status change or restart retries.
+            logger.warning("Sidecar channel_status update failed: %s", e)
+
+    def set_channel_status(self, offline, events):
+        """Record a live channel_status change in today's sidecar.
+
+        Parameters
+        ----------
+        offline : list of OfflineChannel
+        events : list of ChannelEvent
+        """
+        with self._lock:
+            self._channel_status = _channel_status_dict(offline, events)
+            if self._current_date is not None and not self._closed:
+                self._update_sidecar_status(self._current_date)
 
     def _close_handles(self):
         for fh in self._fh.values():

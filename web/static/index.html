@@ -37,6 +37,13 @@
                  letter-spacing:.04em; margin:8px 0 4px; }
   .picker label { display:inline-flex; align-items:center; gap:5px; margin:0 14px 6px 0; font-size:13px; }
   .plot-label { font-size:12px; color:#9aa4b2; margin:10px 0 4px; }
+  /* Channel tagged offline in daq_config.json channel_status. Display only. */
+  .card.offline { opacity:.45; border-style:dashed; }
+  .card.offline .value { color:#9aa4b2; }
+  .card .tag { font-size:10px; color:#9aa4b2; margin-top:3px; text-transform:uppercase; letter-spacing:.04em; }
+  #banner { display:none; background:#5c1a1a; color:#fff; border-bottom:2px solid #e05050;
+            padding:12px 20px; font-size:15px; font-weight:600; }
+  #banner .sub { display:block; font-size:12px; font-weight:400; color:#f0c8c8; margin-top:3px; }
 </style>
 </head>
 <body>
@@ -44,6 +51,7 @@
   <h1>MH DAQ Live</h1>
   <span id="status">connecting...</span>
 </header>
+<div id="banner" role="alert"></div>
 <main>
   <div class="section-title">Weather (AIO 2)</div>
   <div class="grid" id="weather"></div>
@@ -60,6 +68,7 @@
     </label>
     <button class="secondary" onclick="togglePicker()">Choose channels</button>
     <span id="picker-count"></span>
+    <button class="secondary" id="reset-detail" onclick="resetDetail()" style="display:none;">Back to live</button>
     <span id="detail-label" style="font-size:12px;color:#9aa4b2;"></span>
   </div>
   <div id="picker" class="picker" style="display:none;"></div>

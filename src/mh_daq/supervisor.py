@@ -20,6 +20,9 @@ Update log:
         result instead of probing Mission every second.
     2026-10-08: Write the heartbeat through atomic_write_json, which retries
         while the mirror holds the file open.
+    2026-11-09: Add a config thread that live-reloads alarm rules and
+        channel status. The watchdog also checks Mission reachability for the
+        Mission-outage email.
 """
 
 import logging
@@ -28,8 +31,12 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from .config_watch import ConfigWatcher
 from .outdoor_reader import LatestFields
 from .writer import atomic_write_json
+
+# How often the config thread checks the config files' modified times.
+_CONFIG_POLL_S = 30.0
 
 logger = logging.getLogger("mh_daq.supervisor")
 
@@ -47,14 +54,19 @@ class Supervisor:
         Given a publish callback that feeds the latest-outdoor holder.
     mirror : MissionMirror
     alarms : AlarmEngine
+    config_watcher : ConfigWatcher, optional
+        Defaults to one built from config, alarms, and the indoor writer.
     """
 
-    def __init__(self, config, indoor_daemon, outdoor_reader, mirror, alarms):
+    def __init__(self, config, indoor_daemon, outdoor_reader, mirror, alarms, config_watcher=None):
         self._config = config
         self._indoor = indoor_daemon
         self._outdoor = outdoor_reader
         self._mirror = mirror
         self._alarms = alarms
+        self._config_watcher = config_watcher or ConfigWatcher(
+            config, alarms, indoor_daemon.writer
+        )
         self._stop = threading.Event()
         self._threads = []
         self._latest_outdoor = LatestFields()
@@ -95,10 +107,17 @@ class Supervisor:
             self._stop.wait(1.0)
 
     def _watchdog_loop(self):
-        """Check acquisition dropout on a timer independent of the read loop."""
+        """Check acquisition dropout and Mission outage on their own timer.
+
+        Independent of the read loop, so a hung read is still caught. Mission
+        reachability comes from the mirror's last tick, never a fresh probe.
+        """
         interval = max(5.0, self._config.quality.dropout_s / 2.0)
         while not self._stop.is_set():
-            for e in self._alarms.check_dropout(datetime.now()):
+            now = datetime.now()
+            for e in self._alarms.check_dropout(now):
+                logger.warning("Watchdog: %s", e)
+            for e in self._alarms.check_mission(self._mirror.last_available, now):
                 logger.warning("Watchdog: %s", e)
             self._stop.wait(interval)
 
@@ -112,6 +131,12 @@ class Supervisor:
             threading.Thread(target=self._mirror.run_loop, name="mirror", daemon=True),
             threading.Thread(target=self._watchdog_loop, name="watchdog", daemon=True),
             threading.Thread(target=self._heartbeat_loop, name="heartbeat", daemon=True),
+            threading.Thread(
+                target=self._config_watcher.run_loop,
+                args=(_CONFIG_POLL_S,),
+                name="config",
+                daemon=True,
+            ),
         ]
         for t in self._threads:
             t.start()
@@ -124,6 +149,7 @@ class Supervisor:
         self._indoor.stop()
         self._outdoor.stop()
         self._mirror.stop()
+        self._config_watcher.stop()
         for t in self._threads:
             t.join(timeout=10.0)
         # Close the shared writer last, after all writing threads have stopped.
