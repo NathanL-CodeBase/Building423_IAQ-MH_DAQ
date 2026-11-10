@@ -6,9 +6,9 @@ This file adds to the global preferences in `~/.claude/CLAUDE.md` and does not r
 - Purpose: data acquisition, logging, alarms, and live web display for the NIST Building 423 IAQ Manufactured House. It replaces a LabVIEW cDAQ VI, a LabVIEW AIO 2 VI, and a temporary Python weather script.
 - Hardware: NI cDAQ-9178 (five NI 9201 voltage modules, one NI 9213 thermocouple module) and a Met One AIO 2 on RS-485 to USB (9600 baud, 8N1, 1 Hz).
 - Conda environments: `iaqmh_daq` for acquisition, `mh_daq_web` for the dashboard.
-- Status (2026-10-10): running on the acquisition machine since 2026-10-07 12:11:23 local, in a week-long test. The house and the PM instruments are logging background while the campaign does gas-phase chamber work for the next few weeks.
-- `README.md` and `doc/mh-daq-plan.md` (last updated 2026-10-02) predate the cutover and still call LabVIEW the system of record. Update them when I ask.
-- This repository will be folded into `Building423_IAQ-MH_DAQ`, which works on the same hardware.
+- Status (2026-11-10): the system of record since 2026-10-07 12:11:23 local, still run as an extended test setup started by hand (no Splinterware autostart). The dashboard runs on the DAQ PC (local mode) and on appleseed (mission mode, with the stale-heartbeat email watchdog).
+- Record every restart, outage, clock change, and sensor change in `doc/operations_log.md`. Remaining work is in `doc/mh-daq-plan.md`.
+- This repository will be folded into `Building423_IAQ-MH_DAQ`, which works on the same hardware. Splinterware autostart waits for the fold.
 
 ## When to load a skill
 - `iaq-field-data`: before changing acquisition, scaling, writer, mirror, or config code, and before reading an output file.
@@ -28,6 +28,7 @@ This file adds to the global preferences in `~/.claude/CLAUDE.md` and does not r
 - The daemon on the acquisition machine is live. Do not stop it, restart it, or change files it reads without my explicit go-ahead.
 - `daq_local.json` is gitignored and holds paths, the serial port, and SMTP details. Never commit it, and never copy its values into a tracked file or a log.
 - `config/daq_config.json` holds the channel map, scales, timing, and alarm rules. The scale coefficients come from the NI MAX export. Ask before changing a coefficient, a channel, or an alarm rule.
+- Alarm-rule and `channel_status` edits go in this repository and reach the DAQ PC by `git pull`. The daemon reloads them within 30 s, with no restart. Other config sections need a restart.
 - Output is SI with the unit in each column name: Pa, m3/h, degC, percent, W. Timestamps in the data files are local time.
 - The acquisition machine writes locally first, then mirrors to network storage. Downstream code reads the network copy. Do not write to the network storage from tests or from a development machine.
 - `retention_days` is read but not enforced. Enforcing it deletes local data, so do not add deletion code without my decision on the rule.
@@ -47,11 +48,11 @@ What that evaluation found, and what it means here:
 - The LabVIEW files changed header five times between 2026-07-06 and 2026-10-06. Do not rename a column in place. Add a column, and record the date in the metadata file.
 - The filter dP sensors were swapped on 2026-09-01 13:45:01 while LabVIEW kept the old channel names until 2026-09-09. When a sensor on a channel changes, record the swap time and the new range in config, and name the column by sensor range.
 - The LabVIEW files repeated about 300 timestamps per day and skipped about as many. Check new files for repeated or skipped seconds after any change to the acquisition loop or the writer.
-- Both eras put a trailing tab on every data row, and the loader reads with `index_col=False`. Keep the row format unless I ask for a change.
+- LabVIEW-era data rows end in a trailing tab; rows from the rebuilt writer do not. Readers use `index_col=False`, which handles both. Keep the row format unless I ask for a change.
 - The cutover left about 20 minutes with no data on 2026-10-07 (last LabVIEW record 12:06:22, first rebuilt record 12:11:23, a further hole 12:12:08 to 12:26:57). Log every restart with its start and stop time.
 - New-format files dated before the cutover are test data (2026-09-28 holds a 23 minute snippet).
 - Rain and solar read zero with no sensor attached. Wind direction is referenced to magnetic north.
-- Slot 1 (NI 9201) is installed and logged, but the Setra 264 envelope dP sensors are not connected to it (confirmed 2026-10-10). Its channels report an open-input voltage, not a pressure. The sensors are still in the house with their wires run to the DAQ, so they can be reattached. Treat the slot 1 columns as no data, keep the channels in the channel map, and when I say a sensor is reconnected, record the date and time in config and in the metadata file.
+- Slot 1 (NI 9201) is installed and logged, but the Setra 264 envelope dP sensors are not connected to it (confirmed 2026-10-10). Its channels report an open-input voltage, not a pressure. The sensors are still in the house with their wires run to the DAQ, so they can be reattached. Treat the slot 1 columns as no data, keep the channels in the channel map, and when I say a sensor is reconnected, record the date and time in config and in the metadata file. Exception: `dP_Fam-W-Hi_M1_C6` has had a Setra 264 (+/-0.1 in WC) attached since about 2026-11-04 18:02:44, recorded in `channel_status.events`.
 
 ## Differences from the repository standard
 - Documentation is in `doc/`, not `docs/`.

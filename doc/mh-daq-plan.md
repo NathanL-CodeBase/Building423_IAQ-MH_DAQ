@@ -2,45 +2,66 @@
 
 Author: Nathan Lima (NIST)
 Created: 2026-09-25
-Last updated: 2026-10-02
+Last updated: 2026-11-10
 
-The build history, resolved open items, and earlier status notes were removed on 2026-10-02. They remain in git history before that date.
+The build history, resolved open items, and earlier status notes were removed on 2026-10-02 and 2026-11-10. They remain in git history before those dates. Dated events (restarts, outages, clock and sensor changes) are in `operations_log.md`.
 
 ## Purpose
 
 One Python system replaces three pieces: the LabVIEW cDAQ acquisition VI, the broken LabVIEW AIO 2 VI, and the temporary `generate_weather_station_daq.py` bridge. It acquires from an NI cDAQ-9178 and a Met One AIO 2, scales to SI, logs raw and SI daily files, mirrors to Mission, sends alarm email, and feeds the group and weather webpages.
 
-## Status (2026-10-02)
+## Status (2026-11-10)
 
-Acquisition and the web layer are built and tested in simulation. The daemon ran once on real hardware, in the supervised cutover on 2026-09-28, and matched LabVIEW channel for channel. LabVIEW is still the system of record, by choice. The full switch waits for the lab-test lull, when the MH DAQ is least needed.
+The daemon is the system of record. It replaced LabVIEW at 2026-10-07 12:11:23 and has run on the DAQ PC since, apart from the gaps in `operations_log.md`. It is still run as an extended test setup, started by hand, until the fold into `Building423_IAQ-MH_DAQ`. The old Mission backup script is retired. The dashboard runs on the DAQ PC in local mode and on appleseed in mission mode.
+
+Added 2026-11-09 to 11-10:
+
+- **Alarms:**
+  - Temporary alarm rules with an active window.
+  - Live reload of alarm rules, channel status, and per-rule recipients, with no restart.
+  - Mission-outage email from the DAQ PC.
+  - A background email queue, so SMTP never blocks acquisition.
+- **Dashboard:**
+  - Stale-heartbeat email watchdog and banner, from appleseed.
+  - Offline tags that grey dashboard cards.
+  - AIO 2 fields on the group trends.
+  - A "Back to live" control.
+- **Weather page:**
+  - Rebuilt as a weather-station layout.
+  - The download reaches the LabVIEW-era files back to 2025-02-24.
+- **Clock:** NetTime on the DAQ PC.
 
 ## Remaining work
 
 Ordered roughly by when each should happen.
 
-1. **Mission layout decision (before the full move).** The daemon writes to `raw_data/mh_daq/YYYY/` (`mission_subdir` = `mh_daq`, already coded). The LabVIEW-era `raw_data/indoor_daq` and `raw_data/weather_station` folders stay until moved to `old/` or left in place. Confirm what currently reads those folders so nothing is orphaned when the old backup is retired. Also decide where the snapshot lives: `mission_snapshot_dir` (`live_snapshot`) does not exist on Mission yet and is created on the first copy. Nathan owns this call; downstream projects (WUI and others) update their own readers.
+1. **Ozone remediation alarm dates.** The rule on `dP_Fam-W-Hi_M1_C6` (below 15 Pa, 60 s dwell) is staged in `daq_config.json` for 2026-11-18 00:00 to 11-21 23:59. The ozone work is not scheduled yet. Before 11-18 00:00, either set the real window or remove the rule; `dP_Fam-W-Hi_M1_C6` read 0.58 Pa on 2026-11-10, so the staged window trips at its start. The DAQ PC's `daq_local.json` needs an `alarm_rule_email` entry for the rule's description to use the garage recipients.
 
-2. **Hardware cutover (lab-test lull).** Stop the LabVIEW cDAQ VI and the temp weather script, run `run_daq.py --hardware`, and watch `status.py --watch` and `compare_cutover.py`. Compare the 6V reference, RH and T, blower TCs, and AIO 2 against the last LabVIEW values, then keep or roll back. Rollback: Ctrl+C, restart the LabVIEW VI and the temp script. Use that day's LabVIEW file as the baseline; the January 2026 file had module 2 wired differently.
+2. **Mission access overnight (IT).** On 2026-11-08 to 11-09 the DAQ PC lost access to Mission from 23:36 to 08:33 and regained it after a remote login. The functional IAQ account shows no Kerberos tickets (`klist`: no credentials cache). The question is with IT. Until it is resolved, expect a `MISSION UNREACHABLE` email after 2 h of each outage. Raise `alarms.quality.mission_outage_s` (restart needed) if that is too frequent.
 
-3. **Retire the old Mission backup script** as an explicit cutover step. It copies `C:/Users/iaq/Desktop/Outdoor_Data` and `Task_Logger_Data` wholesale to `raw_data`. Running it alongside the daemon would copy stale LabVIEW folders and miss the new files.
+3. **Windows Time service (IT).** NetTime runs as a service, and W32Time is still running (start type Manual). Ask IT whether to disable W32Time so only one program sets the clock. Then read the hourly NetTime corrections to get the DAQ PC drift rate and compare it with the Ecobee offset.
 
-4. **Local retention window.** `retention_days` is 90 in `daq_local.template.json`. The config loader reads it, but nothing deletes old local files yet. Enforcing it means automatic deletion of local data, so decide the window and the rule (for example, delete only files already confirmed on Mission) before coding it.
+4. **Recovery after a power loss.** The house lost power at 2026-10-17 06:54:18, and the daemon did not run again until 2026-10-26 12:50:55. That is 9 d 6 h with no data.
+   - **BIOS:** set the power-restore setting (named "AC power recovery", "Restore on AC power loss", or similar) to power on, so the PC boots when power returns.
+   - **Autostart:** the daemon is still started by hand as a test setup. Splinterware autostart through `start_mh_daq.bat` waits until this code is folded into `Building423_IAQ-MH_DAQ` (item 7). Until then, a reboot leaves the daemon stopped.
+   - **`.bat` paths:** the file holds fixed `C:\Users\iaq` paths. Change it to find the repository from its own folder, as `start_dashboard_mission.bat` does, before it is used.
+   - **Backstop:** the appleseed watchdog (added 2026-11-09) emails after 24 h without a heartbeat. It covers a stopped daemon as well as a dead PC.
 
-5. **Deploy the web layer to the web box.** The box runs Windows 11 now and may move to a Linux VM through IT; uvicorn runs the same on both. Run it with `MH_DAQ_SOURCE=mission`, which reads the dailies from `raw_data/mh_daq` and the snapshot and heartbeat from `live_snapshot` and switches the health thresholds to 90 s (delayed) and 300 s (down). Already in use on the desktop and AppleSeed during the week-long log test started 2026-10-07.
+5. **Local retention window.** `retention_days` is 90 in `daq_local.template.json`. The config loader reads it, but nothing deletes old local files. Enforcing it deletes local data, so decide the window and the rule (for example, delete only files already confirmed on Mission) before coding it.
 
-6. **Access separation.** The group-private page shows all channels; the NIST-internal weather page shows AIO 2 only. Two routes on one app with different scopes is the simplest layout. Choose the auth mechanism once the box is on a reachable network.
+6. **Access separation.** The group-private page shows all channels; the NIST-internal weather page shows AIO 2 only. Two routes on one app with different scopes is the simplest layout. Choose the auth mechanism once the web box is on a reachable network. The box runs Windows 11 now and may move to a Linux VM through IT; uvicorn runs the same on both.
 
-7. **Splinterware autostart** through `start_mh_daq.bat`, only after the daemon has run attended for a day or two.
+7. **Fold into `usnistgov/Building423_IAQ-MH_DAQ`** as a major update, pushed as NathanL-NIST over SSH. Set up Splinterware autostart after the fold.
 
-8. **Fold into `usnistgov/Building423_IAQ-MH_DAQ`** as a major update, pushed as NathanL-NIST over SSH.
-
-9. **Smaller items:**
-   - Weather channels in the group picker. The picker is indoor-only; decide whether to add AIO 2 fields so indoor and outdoor trend on one plot.
-   - Card grouping. HVAC supply T and RH sit in their own HVAC System section. Confirm, or fold them back into Temperature and Relative Humidity.
-   - Web endpoint tests: snapshot present and absent, trend parsing, CSV download.
-   - The watts scale description in NI MAX still carries a leftover self-note. Clean it when convenient.
-   - The 6V reference battery reads about 5.71 V on both systems. Swap it; not urgent.
-   - Confirm the AIO 2 supply is 24 V. Battery voltage reads 23.2 V, inside the 8 to 36 VDC spec.
+8. **Smaller items:**
+   - **Disconnected sensors.** Reattach or retire the sensors tagged offline in `channel_status`, and record the date in config and `operations_log.md`. These are seven slot 1 Setra 264 envelope channels and the Attic, Ba1, UR, and HVAC supply HMP T and RH probes.
+   - **Card grouping.** HVAC supply T and RH sit in their own HVAC System section. Confirm, or fold them back into Temperature and Relative Humidity.
+   - **Web endpoint tests.** `web/data_access.py` and the watchdog have tests. The FastAPI routes (snapshot present and absent, trend, weather series, CSV download, cache headers) do not.
+   - **Email queue limit.** The DAQ PC queues up to 200 alarm emails. If SMTP is down long enough to fill it, new messages are dropped and logged.
+   - **`status.py`.** It does not yet show the `mission_outage` alarm state.
+   - **NI MAX watts scale.** Its description still carries a leftover self-note. Clean it when convenient.
+   - **6V reference battery.** It reads about 5.71 V on both systems. Swap it; not urgent.
+   - **AIO 2 supply.** Confirm it is 24 V. Battery voltage reads 23.2 V, inside the 8 to 36 VDC spec.
 
 ## Reference
 
@@ -82,7 +103,9 @@ The DAQmx task opened 42 channels at 1 kHz x 100 samples, the loop ran at 1 Hz, 
 - `T_HVAC-S_M5_C7` reads about -40 degC (0 V) on both systems; the HVAC supply HMP155 T probe is disconnected. `RH_HVAC-S` reads about 81 % on both, so only the T side is off.
 - House dP channels sit at the 0 V floor on both: -0.100 in WC in LabVIEW, -24.878 Pa in the new system. The house Setras are disconnected on purpose; the HVAC filter Setras are connected and reading.
 
-The system was rolled back to LabVIEW by choice. That week's test differed from past tests, and the full move fits better in the lab-test lull.
+The system was rolled back to LabVIEW by choice that day. The permanent cutover followed on 2026-10-07 at 12:11:23.
+
+Later checks changed two of these readings. The HVAC supply RH channel also reads 0 V as of 2026-11-10, so both HVAC supply probes are now tagged offline. `dP_Fam-W-Hi_M1_C6` has had a Setra 264 attached since about 2026-11-04 18:02:44.
 
 ### Timestamps are local and naive
 
@@ -94,14 +117,16 @@ Acquisition is split from everything that displays or serves, so a failing page 
 
 - **DAQ PC daemon** (headless, autostart): writes the local daily files first, mirrors them to Mission on its own thread, publishes the snapshot and heartbeat, runs alarms. It is the only writer of archival files, which removes the LabVIEW two-writer crash.
 - **RDP status tool** (`status.py`): run on demand over Remote Desktop. It reads the heartbeat and snapshot only.
-- **Web box** (not deployed): reads Mission only, never the DAQ PC. It serves the group-private page and the NIST-internal weather page. Indoor data is absent from the weather feed by construction, not filtered out.
+- **Dashboard in mission mode** (appleseed now; a web box later): reads Mission only, never the DAQ PC. It serves the group-private page and the NIST-internal weather page, and runs the stale-heartbeat email watchdog. Indoor data is absent from the weather feed by construction, not filtered out.
 
 ### Machines and environments
 
 - **Dev box, NISTTeleworkSys:** development and simulation testing, no cDAQ attached. Keep the repo off OneDrive; OneDrive locks caused a stale bytecode cache and a `.pytest_cache` WinError 5.
 - **DAQ PC:** Windows 11, i5-1245U, 16 GB RAM, 500 GB disk, NI-DAQmx driver installed. Keep installs minimal. Do not put the repo, data, or log folders under OneDrive.
 - **Environments:** `iaqmh_daq` from `environment.yaml` for the daemon and tests; `mh_daq_web` from `environment-web.yaml` for the web layer, which keeps web dependencies off the DAQ PC. The conda package is `nidaqmx-python`; the import is `import nidaqmx`. The bare `nidaqmx` conda package is dead.
+- **appleseed:** always-on desktop running `start_dashboard_mission.bat` (mission mode, stale-heartbeat watchdog on).
 - Splinterware System Scheduler runs the `.bat` autostart; Windows Task Scheduler is not available on the DAQ PC.
+- **Clock:** NetTime 3.1.4 runs as a service on the DAQ PC, syncing hourly from `time.nist.gov` and `time.windows.com` (installed 2026-11-09).
 
 ### NI MAX coefficients
 
@@ -133,4 +158,6 @@ SI conversions: inch WC to Pa at 248.84 (60 degF basis); ACFM to m3/h at 1.699, 
 - Wind direction is referenced to magnetic north. True north needs the MD command at the sensor.
 - The parser handles a variable field count, because BV and CV appear only when enabled at the sensor.
 - The local write comes first, then the Mission mirror. A Mission outage never blocks acquisition.
-- Active alarm rule: garage temperature (`T_Gar_M5_C4`) above 28 degC for 60 s. Blower thermocouple and other thresholds come later.
+- **Standing alarm rules:** garage temperature (`T_Gar_M5_C4`) above 28 degC or below 15 degC for 60 s. Blower thermocouple and other thresholds come later.
+- **Test-specific limits:** these go in as temporary rules with an active window, not as edits to the standing rules.
+- **Offline tags:** a channel tagged offline is greyed on the dashboard only. It stays in the channel map, the files, the picker, and the alarms, so a reattached sensor shows its data before the tag is removed.
