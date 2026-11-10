@@ -193,8 +193,9 @@ def test_format_age():
 def test_committed_channel_status_and_legacy_load():
     cfg = load_config()
     offline = {o.channel for o in cfg.offline_channels}
-    assert len(offline) == 7
-    assert "dP_Fam-W-Hi_M1_C6" not in offline
+    slot1 = {c.name for c in cfg.channels if c.physical_channel.startswith("cDAQ1Mod1/")}
+    assert slot1 - offline == {"dP_Fam-W-Hi_M1_C6"}
+    assert {"T_Attic_M5_C5", "RH_Attic_M4_C1", "T_HVAC-S_M5_C7", "RH_HVAC-S_M4_C3"} <= offline
     assert any(e.channel == "dP_Fam-W-Hi_M1_C6" for e in cfg.channel_events)
     assert cfg.legacy_outdoor.cutover_local == datetime(2026, 10, 7, 12, 11, 23)
     present = {c.field: c.present for c in cfg.aio2.output_columns}

@@ -216,7 +216,15 @@
       {"channel": "dP_Bed3-E-Lo_M1_C3", "since": null, "reason": "Setra 264 envelope sensor not attached to slot 1 (confirmed 2026-10-10)."},
       {"channel": "dP_Fam-S-Hi_M1_C4",  "since": null, "reason": "Setra 264 envelope sensor not attached to slot 1 (confirmed 2026-10-10)."},
       {"channel": "dP_Fam-S-Lo_M1_C5",  "since": null, "reason": "Setra 264 envelope sensor not attached to slot 1 (confirmed 2026-10-10)."},
-      {"channel": "dP_Fam-W-Lo_M1_C7",  "since": null, "reason": "Setra 264 envelope sensor not attached to slot 1 (confirmed 2026-10-10)."}
+      {"channel": "dP_Fam-W-Lo_M1_C7",  "since": null, "reason": "Setra 264 envelope sensor not attached to slot 1 (confirmed 2026-10-10)."},
+      {"channel": "T_Attic_M5_C5",   "since": null, "reason": "HMP45A unplugged; reads the 0 V value (about -40 degC) (confirmed 2026-11-10)."},
+      {"channel": "RH_Attic_M4_C1",  "since": null, "reason": "HMP45A unplugged; reads the 0 V value (about 0 %) (confirmed 2026-11-10)."},
+      {"channel": "T_Ba1_M5_C2",     "since": null, "reason": "HMP45A unplugged; reads the 0 V value (about -40 degC) (confirmed 2026-11-10)."},
+      {"channel": "RH_Ba1_M3_C6",    "since": null, "reason": "HMP45A unplugged; reads the 0 V value (about 0 %) (confirmed 2026-11-10)."},
+      {"channel": "T_UR_M5_C3",      "since": null, "reason": "HMP45A unplugged; reads the 0 V value (about -40 degC) (confirmed 2026-11-10)."},
+      {"channel": "RH_UR_M3_C7",     "since": null, "reason": "HMP45A unplugged; reads the 0 V value (about 0 %) (confirmed 2026-11-10)."},
+      {"channel": "T_HVAC-S_M5_C7",  "since": null, "reason": "HMP155 unplugged; reads the 0 V value (about -40 degC) (confirmed 2026-11-10)."},
+      {"channel": "RH_HVAC-S_M4_C3", "since": null, "reason": "HMP155 unplugged; reads the 0 V value (about 0 %) (confirmed 2026-11-10)."}
     ],
     "events": [
       {"time_local": "2026-11-04 18:02:44", "channel": "dP_Fam-W-Hi_M1_C6", "event": "connected", "note": "Setra 264 +/-0.1 in WC (setra_264_01) reattached; time approximate. Reads positive in the logged sign convention."}

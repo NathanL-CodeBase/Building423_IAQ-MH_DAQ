@@ -278,7 +278,8 @@ def test_sidecar_channel_status_written_and_updated(watched, tmp_path):
     writer.write_indoor(now, _si(load_config(config_dir=cfg_dir)), _si(load_config(config_dir=cfg_dir)))
     sidecar = tmp_path / "data" / "2026" / "20261109-MH_metadata.json"
     first = json.loads(sidecar.read_text(encoding="utf-8"))
-    assert len(first["channel_status"]["offline"]) == 7
+    n_offline = len(load_config(config_dir=cfg_dir).offline_channels)
+    assert len(first["channel_status"]["offline"]) == n_offline
     assert first["channel_status"]["events"][0]["channel"] == "dP_Fam-W-Hi_M1_C6"
 
     writer.set_channel_status([OfflineChannel(channel="dP_Liv-Hi_M1_C0", reason="test")], [])
@@ -303,4 +304,4 @@ def test_sidecar_without_status_gets_it_on_restart(tmp_path, config):
         writer.close()
     updated = json.loads(path.read_text(encoding="utf-8"))
     assert updated["note"] == "older sidecar"
-    assert len(updated["channel_status"]["offline"]) == 7
+    assert len(updated["channel_status"]["offline"]) == len(config.offline_channels)

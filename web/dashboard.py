@@ -32,6 +32,8 @@ Update log:
         watchdog emails when the Mission heartbeat goes stale.
     2026-11-09: Re-read channel_status when daq_config.json changes and
         send the offline tags with each snapshot.
+    2026-11-10: Send Cache-Control: no-cache with pages and static files,
+        so browsers pick up new page scripts after an update.
 
 Usage (from repo root, mh_daq_web env, PowerShell):
     # DAQ PC or sim machine (default): reads config.local.local_data_dir
@@ -114,6 +116,22 @@ async def _lifespan(app):
 
 
 app = FastAPI(title="MH DAQ Group Dashboard", lifespan=_lifespan)
+
+
+@app.middleware("http")
+async def _no_cache(request, call_next):
+    """Make browsers revalidate pages and static files on every load.
+
+    Without a Cache-Control header the browser picks its own reuse time, and
+    after an update it kept running the old index.js against the new API.
+    no-cache still allows a cached copy, but only after the server confirms
+    it is current (a 304 against the ETag), so the cost is one small request.
+    """
+    response = await call_next(request)
+    path = request.url.path
+    if path in ("/", "/weather") or path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 # Pages, their scripts, and vendored Plotly are all served locally, so the
 # site has no external CDN dependency on an internal server with no outbound web.
