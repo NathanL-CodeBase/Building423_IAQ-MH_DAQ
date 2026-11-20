@@ -164,8 +164,8 @@
   "alarms": {
     "email": {
       "enabled": true,
-      "min_interval_s": 300,
-      "notes": "min_interval_s throttles repeat emails per rule so a stuck condition does not flood the inbox."
+      "min_interval_s": 3600,
+      "notes": "min_interval_s throttles repeat emails per rule so a stuck condition does not flood the inbox. Needs a restart."
     },
     "quality": {
       "dropout_s": 30,
@@ -174,7 +174,7 @@
       "mission_outage_s": 7200,
       "notes": "dropout_s: no new record. stale_s: newest record older than this. frozen_count: identical value repeated this many records. mission_outage_s: Mission unreachable this long before the daemon emails smtp to_addrs (one email, then one on recovery); 0 disables."
     },
-    "rules_notes": "Rules reload while the daemon runs (checked every 30 s), as do channel_status and alarm_rule_email in daq_local.json; other sections need a restart. category is standing or temporary. A temporary rule sets active_from and active_until (local time, YYYY-MM-DD HH:MM:SS) and never trips outside that window. Descriptions must be unique; alarm_rule_email in daq_local.json maps a description to its recipients, and a rule without an entry emails smtp to_addrs.",
+    "rules_notes": "Rules reload while the daemon runs (checked every 30 s), as do channel_status and alarm_rule_email in daq_local.json; other sections need a restart. category is standing or temporary. A temporary rule sets active_from and active_until (local time, YYYY-MM-DD HH:MM:SS) and never trips outside that window. Descriptions must be unique; alarm_rule_email in daq_local.json maps a description to its recipients, and a rule without an entry emails smtp to_addrs. Optional deadband (rule unit, default 0) and clear_dwell_s (default dwell_s): a tripped rule clears only after the value is deadband inside the limit for clear_dwell_s, so a value at the limit does not trip and clear repeatedly.",
     "rules": [
       {
         "channel": "T_Gar_M5_C4",
@@ -198,11 +198,13 @@
         "channel": "dP_Fam-W-Hi_M1_C6",
         "description": "Family room west dP low (ozone remediation)",
         "category": "temporary",
-        "active_from": "2026-11-18 00:00:00",
-        "active_until": "2026-11-21 23:59:59",
+        "active_from": "2026-11-24 09:30:00",
+        "active_until": "2026-11-26 23:59:59",
         "high": null,
         "low": 15.0,
         "dwell_s": 60,
+        "deadband": 1.0,
+        "clear_dwell_s": 300,
         "unit": "Pa"
       }
     ]

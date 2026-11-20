@@ -26,6 +26,9 @@ Update log:
         load_dynamic re-reads alarms.rules, channel_status, and
         alarm_rule_email for live reload; a fingerprint of the other sections
         flags edits that still need a restart. Add quality.mission_outage_s.
+    2026-11-20: Alarm rules take an optional deadband and clear_dwell_s
+        (default dwell_s) so a value at a limit does not trip and clear
+        repeatedly.
 """
 
 import json
@@ -118,6 +121,12 @@ class AlarmRule:
     A temporary rule (a test-specific limit) sets active_from and active_until
     in local time; outside that window it never trips. A standing rule leaves
     both None and is always active.
+
+    deadband and clear_dwell_s keep a value that hovers at a limit from
+    tripping and clearing over and over: a tripped rule clears only once the
+    value is deadband inside the limit (above low + deadband, below
+    high - deadband) and stays there for clear_dwell_s. clear_dwell_s None
+    means the same as dwell_s.
     """
 
     channel: str
@@ -129,6 +138,13 @@ class AlarmRule:
     category: str = "standing"
     active_from: Optional[datetime] = None
     active_until: Optional[datetime] = None
+    deadband: float = 0.0
+    clear_dwell_s: Optional[float] = None
+
+    @property
+    def clear_dwell(self):
+        """Seconds the clear condition must hold before the rule clears."""
+        return self.dwell_s if self.clear_dwell_s is None else self.clear_dwell_s
 
     def is_active(self, now):
         """Return True if now falls inside the rule's window (inclusive)."""
@@ -484,6 +500,10 @@ def _parse_rules(committed):
             active_until=_parse_local_time(
                 r.get("active_until"), f"Alarm rule '{r['description']}' active_until"
             ),
+            deadband=float(r.get("deadband") or 0.0),
+            clear_dwell_s=(
+                float(r["clear_dwell_s"]) if r.get("clear_dwell_s") is not None else None
+            ),
         )
         for r in committed["alarms"]["rules"]
     ]
@@ -765,6 +785,14 @@ def _rule_problems(rules, valid_channels):
             )
         if r.active_from and r.active_until and r.active_from >= r.active_until:
             problems.append(f"Alarm rule '{r.description}' active_from is not before active_until.")
+        if r.deadband < 0:
+            problems.append(f"Alarm rule '{r.description}' deadband is negative.")
+        if r.clear_dwell_s is not None and r.clear_dwell_s < 0:
+            problems.append(f"Alarm rule '{r.description}' clear_dwell_s is negative.")
+        if r.high is not None and r.low is not None and r.high - r.deadband <= r.low + r.deadband:
+            problems.append(
+                f"Alarm rule '{r.description}' deadband leaves no clear band between low and high."
+            )
     return problems
 
 

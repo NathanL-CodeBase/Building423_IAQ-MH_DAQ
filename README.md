@@ -146,7 +146,7 @@ All email goes to the SMTP settings in `daq_local.json`. On the DAQ PC it is sen
 
 | Email | Sent by | When | Recipients |
 |---|---|---|---|
-| `ALARM`, `ALARM ONGOING`, `CLEARED` | DAQ PC | A rule's condition holds for its dwell time; repeats every `alarms.email.min_interval_s` (300 s) while tripped | `alarm_rule_email[description]`, else `to_addrs` |
+| `ALARM`, `ALARM ONGOING`, `CLEARED` | DAQ PC | A rule's condition holds for its dwell time; repeats every `alarms.email.min_interval_s` (3600 s) while tripped; clears per the rule's `deadband` and `clear_dwell_s` | `alarm_rule_email[description]`, else `to_addrs` |
 | `ALARM WINDOW ENDED` | DAQ PC | A temporary rule is still tripped when its window ends | Same as the rule |
 | `FROZEN` | DAQ PC | A channel repeats one value for `frozen_count` (60) records | `to_addrs` |
 | `DROPOUT` | DAQ PC | No indoor record for `dropout_s` (30 s) | `to_addrs` |
@@ -177,9 +177,13 @@ Example:
   "high": null,
   "low": 15.0,
   "dwell_s": 60,
+  "deadband": 1.0,
+  "clear_dwell_s": 300,
   "unit": "Pa"
 }
 ```
+
+The rule trips after the value stays below 15.0 Pa for 60 s. It clears only after the value stays at or above 16.0 Pa (`low + deadband`) for 300 s, so a reading that wanders across 15.0 Pa sends one `ALARM`, not an `ALARM` and `CLEARED` pair each minute. `deadband` is in the rule's unit and defaults to 0. `clear_dwell_s` defaults to `dwell_s`. Both reload live; `min_interval_s` needs a restart.
 
 Changes to any other section (channel map, scales, timing, AIO 2, mirror, quality limits) need a daemon restart; the log says so when it sees one.
 

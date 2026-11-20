@@ -21,6 +21,10 @@ Update log:
         plain system message (config reload errors).
     2026-11-09: Add QueuedEmailSender, which sends on a background thread
         so a slow or hung SMTP server never stalls the 1 Hz indoor loop.
+    2026-11-20: A tripped rule clears only after the value is the rule's
+        deadband inside the limit for clear_dwell_s, so a value at the limit
+        no longer sends a burst of ALARM and CLEARED emails. No ONGOING email
+        while a clear is pending.
 """
 
 import logging
@@ -156,6 +160,7 @@ class RecordingEmailSender(EmailSender):
 class RuleState:
     tripped: bool = False
     condition_since: Optional[datetime] = None
+    clear_since: Optional[datetime] = None
     last_email: Optional[datetime] = None
 
 
@@ -379,19 +384,19 @@ class AlarmEngine:
         if value is None:
             return []
 
-        cond = False
-        if rule.high is not None and value > rule.high:
-            cond = True
-        if rule.low is not None and value < rule.low:
-            cond = True
-
         events = []
-        if cond:
+        if not st.tripped:
+            tripping = (rule.high is not None and value > rule.high) or (
+                rule.low is not None and value < rule.low
+            )
+            if not tripping:
+                st.condition_since = None
+                return events
             if st.condition_since is None:
                 st.condition_since = now
-            dwell_ok = (now - st.condition_since).total_seconds() >= rule.dwell_s
-            if dwell_ok and not st.tripped:
+            if (now - st.condition_since).total_seconds() >= rule.dwell_s:
                 st.tripped = True
+                st.clear_since = None
                 st.last_email = now
                 events.append(
                     self._emit(
@@ -400,22 +405,21 @@ class AlarmEngine:
                         to_addrs=to_addrs,
                     )
                 )
-            elif (
-                st.tripped
-                and st.last_email is not None
-                and (now - st.last_email).total_seconds() >= self._min_interval_s
-            ):
-                st.last_email = now
-                events.append(
-                    self._emit(
-                        f"ALARM ONGOING: {rule.description}",
-                        self._trip_body(rule, value, now, ongoing=True),
-                        to_addrs=to_addrs,
-                    )
-                )
-        else:
-            if st.tripped:
+            return events
+
+        # Tripped: clear only once the value is deadband inside the limit and
+        # holds there for clear_dwell, so noise at the limit sends no emails.
+        clearing = not (
+            (rule.high is not None and value > rule.high - rule.deadband)
+            or (rule.low is not None and value < rule.low + rule.deadband)
+        )
+        if clearing:
+            if st.clear_since is None:
+                st.clear_since = now
+            if (now - st.clear_since).total_seconds() >= rule.clear_dwell:
                 st.tripped = False
+                st.condition_since = None
+                st.clear_since = None
                 events.append(
                     self._emit(
                         f"CLEARED: {rule.description}",
@@ -424,7 +428,21 @@ class AlarmEngine:
                         to_addrs=to_addrs,
                     )
                 )
-            st.condition_since = None
+            return events
+
+        st.clear_since = None
+        if (
+            st.last_email is not None
+            and (now - st.last_email).total_seconds() >= self._min_interval_s
+        ):
+            st.last_email = now
+            events.append(
+                self._emit(
+                    f"ALARM ONGOING: {rule.description}",
+                    self._trip_body(rule, value, now, ongoing=True),
+                    to_addrs=to_addrs,
+                )
+            )
         return events
 
     def _check_frozen(self, now):
@@ -462,6 +480,14 @@ class AlarmEngine:
             parts.append(f"below {rule.low} {rule.unit}")
         return " or ".join(parts)
 
+    def _clear_text(self, rule):
+        parts = []
+        if rule.low is not None:
+            parts.append(f"at or above {rule.low + rule.deadband:g} {rule.unit}")
+        if rule.high is not None:
+            parts.append(f"at or below {rule.high - rule.deadband:g} {rule.unit}")
+        return " and ".join(parts)
+
     def _trip_body(self, rule, value, now, ongoing=False):
         state = "still tripped" if ongoing else "tripped"
         window = rule.window_text()
@@ -470,6 +496,7 @@ class AlarmEngine:
             f"{rule.channel} = {value:.2f} {rule.unit}, "
             f"threshold {self._threshold_text(rule)}, "
             f"dwell {rule.dwell_s:.0f} s.\n"
+            f"Clears after {rule.clear_dwell:.0f} s {self._clear_text(rule)}.\n"
             + (f"Temporary rule, {window}.\n" if window else "")
             + f"Machine {self._machine}."
         )
