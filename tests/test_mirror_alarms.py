@@ -14,6 +14,8 @@ Update log:
     2026-09-25: Initial version.
     2026-11-20: Re-notify test reads min_interval_s from config. Add deadband
         and clear dwell tests.
+    2026-11-22: Deadband noise test counts only its own rule's email; the
+        other channels sit at 0.0 for 1200 records and send FROZEN.
 """
 
 from datetime import datetime, timedelta
@@ -193,8 +195,8 @@ def test_noise_in_deadband_does_not_clear(config):
     # Hold 15.8 Pa, above the limit but inside the 1 Pa deadband, for 20 min.
     for i in range(1, 1201):
         eng.check(_si_zero(config, {"dP_Fam-W-Hi_M1_C6": 15.8}), t0 + timedelta(seconds=60 + i))
-    assert len(sender.sent) == 1
-    assert "ALARM:" in sender.sent[0][0]
+    rule_mail = [s[0] for s in sender.sent if "test dP low" in s[0]]
+    assert rule_mail == ["[MH DAQ] ALARM: test dP low"]
 
 
 def test_brief_recovery_does_not_clear(config):

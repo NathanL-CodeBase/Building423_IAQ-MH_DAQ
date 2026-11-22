@@ -17,6 +17,8 @@ Author: Nathan Lima
 Created: 2026-11-09
 Update log:
     2026-11-09: Initial version.
+    2026-11-22: Read the ozone rule window from the committed config
+        instead of hard-coding it; skip when no windowed rule is staged.
 """
 
 import json
@@ -52,13 +54,26 @@ def _ozone(config):
     return {"dP_Fam-W-Hi_M1_C6": 10.0, "T_Gar_M5_C4": 20.0}
 
 
+def _ozone_window(config):
+    """Return (active_from, active_until) of the committed ozone rule.
+
+    The window is set when the ozone system is turned on, so the tests place
+    their times relative to it rather than on fixed dates.
+    """
+    rule = next((r for r in config.alarm_rules if r.description == OZONE), None)
+    if rule is None or rule.active_from is None or rule.active_until is None:
+        pytest.skip("No windowed ozone rule in the committed config.")
+    return rule.active_from, rule.active_until
+
+
 # ---------------------------------------------------------------------------
 # Temporary windows
 # ---------------------------------------------------------------------------
 def test_ozone_rule_silent_before_window(config):
     sender = RecordingEmailSender()
     eng = AlarmEngine(config, sender)
-    t0 = datetime(2026, 11, 17, 23, 0, 0)
+    start, _ = _ozone_window(config)
+    t0 = start - timedelta(hours=1)
     low = _si(config, **_ozone(config))
     eng.check(low, t0)
     eng.check(low, t0 + timedelta(seconds=120))
@@ -68,7 +83,8 @@ def test_ozone_rule_silent_before_window(config):
 def test_ozone_rule_trips_inside_window(config):
     sender = RecordingEmailSender()
     eng = AlarmEngine(config, sender)
-    t0 = datetime(2026, 11, 19, 10, 0, 0)
+    start, end = _ozone_window(config)
+    t0 = start + timedelta(hours=1)
     low = _si(config, **_ozone(config))
     eng.check(low, t0)
     eng.check(low, t0 + timedelta(seconds=61))
@@ -76,7 +92,7 @@ def test_ozone_rule_trips_inside_window(config):
     assert len(trips) == 1
     subject, body, to = trips[0]
     assert "below 15.0 Pa" in body
-    assert "Temporary rule, active 2026-11-18 00:00 to 2026-11-21 23:59" in body
+    assert f"Temporary rule, active {start:%Y-%m-%d %H:%M} to {end:%Y-%m-%d %H:%M}" in body
     # Recipients come from alarm_rule_email (the template lists the rule).
     assert to == config.local.alarm_rule_email[OZONE]
 
@@ -84,7 +100,8 @@ def test_ozone_rule_trips_inside_window(config):
 def test_ozone_rule_at_or_above_limit_is_quiet(config):
     sender = RecordingEmailSender()
     eng = AlarmEngine(config, sender)
-    t0 = datetime(2026, 11, 19, 10, 0, 0)
+    start, end = _ozone_window(config)
+    t0 = start + timedelta(hours=1)
     ok = _si(config, **{"dP_Fam-W-Hi_M1_C6": 15.0, "T_Gar_M5_C4": 20.0})
     eng.check(ok, t0)
     eng.check(ok, t0 + timedelta(seconds=61))
@@ -94,11 +111,12 @@ def test_ozone_rule_at_or_above_limit_is_quiet(config):
 def test_window_end_closes_tripped_rule(config):
     sender = RecordingEmailSender()
     eng = AlarmEngine(config, sender)
-    t0 = datetime(2026, 11, 21, 23, 58, 0)
+    _, end = _ozone_window(config)
+    t0 = end - timedelta(seconds=120)
     low = _si(config, **_ozone(config))
     eng.check(low, t0)
-    eng.check(low, t0 + timedelta(seconds=61))  # 23:59:01, trips
-    eng.check(low, t0 + timedelta(seconds=125))  # 00:00:05 on 11-22, window over
+    eng.check(low, t0 + timedelta(seconds=61))  # 59 s before the end, trips
+    eng.check(low, t0 + timedelta(seconds=125))  # 5 s after the end, window over
     subjects = [s[0] for s in sender.sent if OZONE in s[0]]
     assert subjects == [f"[MH DAQ] ALARM: {OZONE}", f"[MH DAQ] ALARM WINDOW ENDED: {OZONE}"]
     assert eng.current_state()["tripped_rules"] == []
@@ -190,7 +208,7 @@ def _edit(path, fn):
 @pytest.mark.parametrize(
     "edit, message",
     [
-        (lambda r: r.update(active_from="2026-11-22 00:00:00"), "not before active_until"),
+        (lambda r: r.update(active_from=r["active_until"]), "not before active_until"),
         (lambda r: r.update(active_from="11/18/2026"), "is not YYYY-MM-DD HH:MM:SS"),
         (lambda r: r.update(category="sometimes"), "is not one of"),
         (lambda r: r.update(description="Garage over-temperature"), "descriptions repeat"),
