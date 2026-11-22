@@ -1,0 +1,11 @@
+name: mh_daq_web
+channels:
+  - conda-forge
+dependencies:
+  - python=3.13
+  - fastapi
+  - uvicorn
+  - pandas
+  # The web app reads config the same way the daemon does, so it needs the
+  # mh_daq package importable. Run the app from the repo root so src/ is on the
+  # path (pytest.ini already sets pythonpath = .), or pip install -e . later.

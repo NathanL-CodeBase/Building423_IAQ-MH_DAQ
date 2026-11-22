@@ -1,239 +1,258 @@
-# Building 423 IAQ Manufactured House (MH) DAQ — Automated Data Acquisition and Backup System
+# Building 423 IAQ Manufactured House (MH) DAQ
 
-Automated backup and data collection scripts for the **NIST IAQ Manufactured House (MH) test facility** Data Acquisition (DAQ) system at Building 423. This repository contains Python scripts and deployment documentation for copying instrument data from the DAQ desktop computer to secure network storage and downloading thermostat data from the Ecobee4 smart thermostat.
+Data acquisition, logging, alarms, and live web display for the NIST Building 423 IAQ Manufactured House. This system reads a National Instruments cDAQ-9178 chassis (indoor temperature, relative humidity, differential pressure, HVAC airflow and power, blower-motor thermocouples) and a Met One AIO 2 sonic weather sensor, scales readings to SI units, writes daily data files, mirrors them to network storage (Mission), sends alarm email, and serves a live dashboard and a weather page with data download.
 
----
+It replaces three earlier pieces: a LabVIEW cDAQ acquisition VI, a LabVIEW AIO 2 VI, and a temporary Python weather-logging script.
 
-## Quick Links
+## Status
 
-- **[Installation Guide](docs/INSTALLATION.md)** — Step-by-step instructions for initial setup
-- **[Configuration Guide](docs/CONFIGURATION.md)** — Detailed configuration and Ecobee API setup
-- **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** — Common issues and solutions
-- **[Instrument Documentation](docs/instruments/INSTRUMENT_DOCUMENTATION.md)** — Specifications and variable lists for all active instruments
-- **[License](LICENSE.md)** — Software licensing information
+The daemon has been the system of record since 2026-10-07 12:11:23 local time, when it replaced the LabVIEW VIs. It runs on the DAQ PC in the house as an extended test setup, started by hand. The dashboard runs on the DAQ PC (local mode) and on appleseed, an always-on desktop that reads the Mission copies. Restarts, outages, clock changes, and sensor changes are listed in `docs/operations_log.md`. Remaining work is in `docs/mh-daq-plan.md`.
 
----
-
-## Purpose and Scope
-
-This repository supports the **continued development** of the MH DAQ backup infrastructure and **deployment/maintenance instructions** for technical personnel. All network paths are **managed in `data_config.json`** to prevent hardcoded paths from being visible in the GitHub repository.
-
-The system:
-
-1. **Backs up indoor DAQ data** from the Task Logger to the mission network drive (all data)
-2. **Backs up outdoor weather station data** (AIO2) to the mission network drive (all data)  
-3. **Downloads thermostat data** from the Ecobee4 thermostat via the Ecobee API (daily 5-minute interval runtime data) — *not yet operational; pending an Ecobee API key (see [System Status](#system-status-and-deployment-timeline))*
-
-**Note:** The active backup scripts reference the same configuration file (`data_config.json`). The EPA Shower measurement campaign ended 2026-07-16; its backup script has been retired from the nightly sequence and moved to `src/completed_campaigns/` (see [What's in This Repository](#whats-in-this-repository)).
-
----
+Version 2.0.0 (2026-11-22) folded the MH DAQ rebuild into this repository and retired the v1 backup scripts. The v1 code remains at tag `v1.0.0`. Changes by version are in `CHANGELOG.md`.
 
 ## Disclaimer
 
 Certain commercial equipment, instruments, software, or materials are identified in this repository in order to specify the experimental and analytical procedures adequately. Such identification is not intended to imply recommendation or endorsement of any product or service by NIST, nor is it intended to imply that the materials or equipment identified are necessarily the best available for the purpose.
 
-## Measurement Uncertainty
+## Measurement uncertainty
 
-This repository is responsible for the automated transfer of raw measurement data from the DAQ computer to network storage. No calculations, data processing, or derivation of new quantities are performed by the scripts in this repository. Therefore, measurement uncertainty is limited to the inherent accuracy and precision of the instruments themselves, as specified in their manufacturer documentation.
+The NI-DAQmx backend samples each indoor channel at 1 kHz and averages 100 samples into each 1 s record. The daemon converts the averaged voltage to SI with the linear coefficients from the NI MAX export (`scales` in `config/daq_config.json`), then applies fixed unit factors: 248.84 Pa per inch WC and 1.699 m3/h per ACFM. The raw volts (thermocouples in degC) go to `{YYYYMMDD}-MH_Indoor_raw.txt` beside the SI file, so every converted value can be recomputed. AIO 2 values are logged as the sensor reports them, with no scaling.
 
-Detailed specifications for each instrument, including measurement ranges, accuracy, resolution, and calibration information, are available in the instrument documentation: [docs/instruments/INSTRUMENT_DOCUMENTATION.md](docs/instruments/INSTRUMENT_DOCUMENTATION.md).
+This repository does not compute measurement uncertainty. It comes from the instruments, the NI 9201 and NI 9213 modules, and the scale coefficients. Instrument ranges, accuracy, resolution, and calibration information are in [docs/instruments/INSTRUMENT_DOCUMENTATION.md](docs/instruments/INSTRUMENT_DOCUMENTATION.md).
 
----
+## Repository contents
 
-## What's in This Repository
+- `src/mh_daq/` reusable modules: config loading and validation (`config.py`), live reload of alarm rules and channel status (`config_watch.py`), voltage-to-SI scaling, the AIO 2 serial parser, the daily file writer, the acquisition daemon, the Mission mirror, the alarm engine and email senders (`alarms.py`), the threading supervisor, and the acquisition backends (`backends/`: shared interface, simulation, NI-DAQmx, and a simulated AIO 2 serial source).
+- `config/` the committed channel map, scales, alarm rules, channel status, and dashboard settings (`daq_config.json`) and a template for the machine-specific local config (`daq_local.template.json`).
+- `web/` the FastAPI dashboard (`dashboard.py`), shared data access and downsampling (`data_access.py`), the stale-heartbeat email watchdog (`watchdog.py`), and front-end files (`static/`: the group page `index.html`/`index.js`, the weather page `weather.html`/`weather.js`, and vendored Plotly).
+- `tests/` the pytest suite: config, scaling, parser, writer, daemon, mirror, alarms (including temporary windows, live reload, and the email queue), supervisor, web data access, and the watchdog.
+- `run_daq.py` entry point for the acquisition daemon (`--sim` or `--hardware`).
+- `status.py` a read-only status view for confirming a running daemon over Remote Desktop.
+- `compare_cutover.py` a helper for comparing daemon output against reference values, used at the hardware cutover.
+- `start_mh_daq.bat` daemon launcher for Splinterware System Scheduler autostart. It finds conda and the repository the same way `start_dashboard_mission.bat` does, so it holds no machine paths. Not in use yet: autostart is set up after the DAQ PC runs from this repository.
+- `start_dashboard_mission.bat` dashboard launcher for a read-only machine; reads Mission and opens the default browser.
+- `environment.yaml` the acquisition conda environment (`iaqmh_daq`); `environment-web.yaml` the web environment (`mh_daq_web`).
+- `docs/` the plan and remaining work (`mh-daq-plan.md`), the operations log (`operations_log.md`), and the instrument documentation (`instruments/`).
+- `CHANGELOG.md` changes by version; `CITATION.cff` citation metadata.
 
-```
-Building423_IAQ-MH_DAQ/
-├── docs/                              # Documentation (read these first!)
-│   ├── INSTALLATION.md               # Quick start guide & deployment steps
-│   ├── CONFIGURATION.md              # Detailed setup & Ecobee configuration
-│   ├── TROUBLESHOOTING.md            # Common issues and solutions
-│   └── instruments/                  # Instrument specs and document links (vendor manuals excluded)
-│       ├── INSTRUMENT_DOCUMENTATION.md  # Specifications and variable lists for all active instruments
-│       └── pdf_links.md              # Public download links for vendor manuals (copyright excluded)
-├── src/                               # Python source code (for development)
-│   ├── mh_daq_file_backup.py         # Main DAQ data backup
-│   ├── wui_smoke_file_backup.py      # WUI Smoke campaign backup (deployment date onward, Elwood share)
-│   ├── ecobee_thermostat_backup.py   # Ecobee thermostat data download
-│   ├── ecobee_token_setup.py         # Ecobee API setup (one-time)
-│   └── completed_campaigns/          # Retired scripts from concluded campaigns
-│       └── epa_shower_file_backup.py # EPA Shower backup (campaign ended 2026-07-16)
-├── scripts/                           # Deployment scripts
-│   ├── run_backup.bat                # Batch file to run all backups in sequence
-│   ├── generate_weather_station_daq.py  # Serial-to-file bridge for the AIO2 weather station (temporary, while the weather DAQ system is offline)
-│   └── run_weather_station_daq.bat   # Batch file to launch the weather station generator (continuous process, not part of the nightly backup)
-├── README.md                          # This file
-├── LICENSE.md                         # Public domain license
-├── CODEMETA.yaml                     # NIST metadata
-├── CODEOWNERS                        # Repository maintainers
-├── data_config.template.json          # Configuration template (copy to data_config.json)
-├── environment.yaml                   # Conda environment definition (iaqmh_daq)
-├── fair-software.md                   # FAIR software principles documentation
-└── .gitignore                         # Git ignore file
-```
+## Data flow
 
----
+The DAQ PC writes locally first, then mirrors to Mission. Everything downstream reads Mission, never the DAQ PC. The daemon acquires the cDAQ and the AIO 2 on independent threads, so a fault on one does not stop the other.
 
-## System Status and Deployment Timeline
+Each day it writes, under `YYYY/` in the local data folder:
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| **DAQ Backup** (Task Logger) | **Operational** | Running via `run_backup.bat`, deployed to DAQ computer |
-| **Weather Station Backup** | **Operational** | Copies AIO2 files to the mission network drive; running via `run_backup.bat`, deployed to DAQ computer |
-| **Weather Station DAQ Generator** | **Temporary** | Reads the AIO2 sensor over serial and writes the daily DAQ file directly, while the weather station's own DAQ system is offline; runs continuously via `run_weather_station_daq.bat` (separate from the nightly `run_backup.bat` cycle) |
-| **WUI Smoke Backup** | **Operational** | Active campaign (first burn 2026-07-31); copies indoor DAQ and weather (deployment date onward) to the Elwood share, runs nightly via `run_backup.bat` |
-| **EPA Shower Backup** | **Retired** | Campaign ended 2026-07-16; script moved to `src/completed_campaigns/` and removed from `run_backup.bat` |
-| **Ecobee Thermostat Data** | **Not operational** | Pending an Ecobee API key; script is deployed but logs an authorization error until a key is obtained |
-| **Splinterware Scheduler** | **Deployed** | Scheduled event configured on the Building 423 DAQ computer; runs `run_backup.bat` nightly |
+| File | Contents |
+|---|---|
+| `{YYYYMMDD}-MH_Indoor_raw.txt` | Indoor channels in volts (thermocouples in degC) |
+| `{YYYYMMDD}-MH_Indoor_SI.txt` | Indoor channels in SI, unit in each column name |
+| `{YYYYMMDD}-MH_Outdoor.txt` | AIO 2 weather fields |
+| `{YYYYMMDD}-MH_metadata.json` | Every column with its channel, scale, and units, plus `channel_status` (offline tags and sensor events) |
 
----
+All three data files are tab-delimited with one header row, `Date` (`MM/DD/YYYY`) and `Time` (`HH:MM:SS`) columns in naive local time, and one record per second. The daemon also rewrites `latest_snapshot.json` (current values) every record and `heartbeat.json` (thread, alarm, and Mission status) every second.
 
-## Getting Started
+The mirror thread copies completed days, the current day every 300 s, and the snapshot and heartbeat every 60 s to Mission, under `raw_data/mh_daq/YYYY/` and `live_snapshot/`. After an outage it copies the backlog on its own. The LabVIEW-era files stay in `raw_data/indoor_daq/` and `raw_data/weather_station/`.
 
-### For End Users (Operators and Technicians)
+`NIST_wui-smoke-iaq-mitigation/src/environmental_loader.py` reads both eras and joins them at the cutover. A change to a file name, a column name, a unit, or the timestamp format breaks that reader.
 
-1. **Read first:** [Installation Guide](docs/INSTALLATION.md) for deployment steps
-2. **Create the conda environment:**
-   ```
-   conda env create -f environment.yaml
-   ```
-   This creates the `iaqmh_daq` environment with `pandas`, `requests`, and `pyserial`. Activate it with `conda activate iaqmh_daq` before running any script manually.
-3. **Configure paths:** 
-   - Copy `data_config.template.json` to `data_config.json`
-   - Edit `data_config.json` to set your local and network paths (no hardcoded paths in scripts!)
-   - See [Configuration Guide](docs/CONFIGURATION.md) for detailed instructions
-4. **Deploy:** Clone the repository to the DAQ computer and run test backup  
-5. **Monitor:** Check `batch_output.log` for successful backups
-6. **Troubleshoot:** See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) if issues arise
+## Requirements
 
-### For Developers
+- Windows 11 on the DAQ PC. Python is managed with conda (conda-forge).
+- The NI-DAQmx driver on the DAQ PC for hardware runs. The `nidaqmx` Python package imports without it, and the simulation backend runs without it, but real acquisition needs the driver.
+- The dashboard runs on any machine that can read Mission. It has no hardware dependency.
+- The DAQ PC clock is kept by NetTime (see Timekeeping).
 
-- Scripts are located in `src/` and are ready for continued development
-- All scripts load configuration from `data_config.json` — no hardcoded paths!
-- All backup functions are modular; new data sources can be added following the existing pattern
-- Python 3.x via the `iaqmh_daq` conda environment (`environment.yaml`) is required (see [Configuration Guide](docs/CONFIGURATION.md))
+## Installation
 
----
-
-## Key Features
-
-**Incremental Backups** — Only copies files that have changed (compares modification times)
-**Safe Live-File Handling** — DAQ backup scripts skip today's data file by default (the DAQ system is still writing to it; copying an open file can produce a corrupt backup). Run with `--include-today` to override when needed.
-**Ecobee Integration** — Automatic download of 5-minute interval thermostat data via Ecobee API (always fetches the previous completed day — no live-file risk). *Not yet enabled — pending an Ecobee API key.*
-**Error Logging** — Detailed logs for troubleshooting and audit trails
-**Manual & Automated** — Run manually on-demand, or automatically each night via the configured Splinterware System Scheduler event
-**Smart Retry Logic** — Handles token refresh and network timeouts gracefully
-
----
-
-## System Requirements
-
-### Hardware & Network
-- **Machine:** DAQ desktop computer (Building 423)
-- **Network access:** NIST mission network
-- **Storage:** Access to the mission network drive (path configured in `data_config.json` → `remote_destinations.mission.base_path`)
-
-### Software
-- **Python 3.x** (installed via Miniforge/Conda — run `conda info --base` to find your install path)
-- **`iaqmh_daq` conda environment** — create it once from `environment.yaml` (`conda env create -f environment.yaml`); provides `pandas`, `requests`, and `pyserial`
-- **Windows command prompt/PowerShell** to run batch files
-
-### For Ecobee Thermostat Data
-- **Ecobee account** with thermostat (thermostat ID configured in `data_config.json`)
-- **Ecobee API key** and authorized token file (see [Configuration Guide](docs/CONFIGURATION.md))
-- **Internet access** from the DAQ computer to reach `api.ecobee.com`
-
----
-
-## Data Organization
-
-All backed-up data is organized by source and date:
+Acquisition environment:
 
 ```
-<remote_destinations.mission.base_path>\        ← configured in data_config.json
-    ├── indoor_daq\          ← Task Logger files
-    ├── weather_station\     ← Outdoor weather station files
-    └── thermostat\          ← Ecobee4 runtime CSVs
-        └── YYYY\
-            └── YYYY-MM-DD_thermostat.csv
+conda env create -f environment.yaml
+conda activate iaqmh_daq
 ```
 
----
+Web environment (only where the dashboard runs):
 
-## Instrumentation
+```
+conda env create -f environment-web.yaml
+conda activate mh_daq_web
+```
 
-> Vendor instrument manuals and data sheets are not tracked in this repository due to copyright. Public download links for all vendor documents are in [docs/instruments/pdf_links.md](docs/instruments/pdf_links.md).
+Then create the machine-specific config from the template and edit it:
 
-### Active Instruments
+```
+Copy-Item config\daq_local.template.json daq_local.json
+```
 
-| Instrument | Type | Measurement | Documentation |
-|------------|------|-------------|---------------|
-| **Met One AIO 2** | Outdoor weather station (10m MET Tower) | Wind speed/direction, temperature, humidity, barometric pressure | [Manual](https://metone.com/wp-content/uploads/2023/03/AIO-2-9800-Manual-Rev-G.pdf), [Supplement](https://metone.com/wp-content/uploads/2019/10/AIO2-1.pdf) |
-| **Vaisala HMP155** | High-accuracy RH/T probe (×4) | Relative humidity, temperature | [User Guide](https://docs.vaisala.com/r/M210912EN-J/en-US) |
-| **Vaisala HMP45A** | RH/T probe (×8, legacy) | Relative humidity, temperature | [User Guide](https://www.vaisala.com/sites/default/files/documents/HMP45AD-User-Guide-U274EN.pdf) |
-| **ecobee4** | Smart Wi-Fi thermostat | Temperature, humidity, HVAC runtime | [Fact Sheet](https://www.firstenergycorp.com/content/dam/customer/products/files/FactSheet-ecobee4.pdf) |
-| **NI cDAQ-9178** | 8-slot USB DAQ chassis | — | [User Manual](https://www.ni.com/docs/en-US/bundle/cdaq-9171-9174-9178-features/resource/372838e.pdf) |
-| **NI 9201** | 8-ch analog input module (×5) | ±10V analog inputs | [Getting Started](https://download.ni.com/support/manuals/373783h.pdf) |
-| **Setra Model 264** | Differential pressure transducer | Differential pressure (currently disconnected) | [Data Sheet](https://www.setra.com/hubfs/Product_Data_Sheets/Setra_Model_264_Data_Sheet.pdf) |
+The loader looks for `daq_local.json` in the working folder, then in `config/`; both locations are gitignored.
 
-### Project-Specific Wiring Documents
+Set `machine_name`, the local and Mission paths, the serial port (leave `AUTO` to find the AIO 2), the SMTP sender and recipients, and `alarm_rule_email` (recipients per alarm rule). This file is gitignored and must not be committed.
 
-> The cDAQ-9178 channel map (xlsx) and weather-station wiring sketch (PDF) are NIST-authored internal documents maintained outside the repository. See [docs/instruments/pdf_links.md](docs/instruments/pdf_links.md) for details.
+## Usage
 
-Detailed specifications, variable names, and channel assignments are in [INSTRUMENT_DOCUMENTATION.md](docs/instruments/INSTRUMENT_DOCUMENTATION.md). Instrument serial numbers are in `data_config.json` under the `instruments` key.
+Run the daemon with the simulation backend (no hardware, safe on any machine):
 
+```
+conda activate iaqmh_daq
+python run_daq.py --sim
+```
 
----
+Run the daemon on real hardware (DAQ PC only, and only when no other program owns the cDAQ):
 
-## License
+```
+python run_daq.py --hardware
+```
 
-This software is in the public domain and provided "as is" according to the [LICENSE.md](LICENSE.md) file.
+Record every restart, with the stop and start times from `mh_daq.log`, in `docs/operations_log.md`.
 
----
+Check a running daemon, for example over Remote Desktop:
+
+```
+python status.py
+python status.py --watch
+```
+
+Run the dashboard from the repository root:
+
+```
+conda activate mh_daq_web
+python -m uvicorn web.dashboard:app --host 127.0.0.1 --port 8000
+```
+
+Open `http://127.0.0.1:8000` for the group dashboard and `http://127.0.0.1:8000/weather` for the weather page. By default the dashboard reads the local data folder from `daq_local.json`, which holds live data only on the DAQ PC. On any other machine, read the Mission copies:
+
+```
+$env:MH_DAQ_SOURCE = "mission"
+python -m uvicorn web.dashboard:app --host 127.0.0.1 --port 8000
+```
+
+`start_dashboard_mission.bat` does the same and opens the default browser after 8 s. It activates `mh_daq_web` from `%USERPROFILE%\miniforge3` or `%LOCALAPPDATA%\miniforge3` (override with `MH_DAQ_CONDA_PATH`).
+
+In mission mode, trends for the current day lag by up to 300 s and the health indicator allows for the 60 s snapshot mirror.
+
+Run the tests:
+
+```
+conda activate iaqmh_daq
+pytest -v
+```
+
+## Dashboard
+
+The group page (`/`) shows:
+
+- Value cards for the AIO 2 and every indoor channel. Living-space T and RH cards turn blue below and red above `display_ranges`. Channels tagged offline in `channel_status` show greyed out.
+- A header status: green when healthy; yellow when the heartbeat is delayed, Mission is unreachable, or an alarm or frozen channel is active; red when the heartbeat is missing or too old, a daemon thread has stopped, or acquisition dropped out.
+- A red banner across the page when the heartbeat is older than `web.stale_banner_s` (1 h).
+- Trend plots: an overview (3 h to 1 month) and a detail plot. Drag on the overview to inspect a range; "Back to live" returns the detail plot to the last 30 min. Any indoor channel or AIO 2 field can be plotted; the defaults are `T_Liv_M4_C7` and `RH_Liv_M3_C3`. Zoom and legend toggles survive the refresh.
+
+The weather page (`/weather`) shows current temperature, RH, pressure with its 3 h change, wind speed with the 10 min gust, and wind direction, above stacked plots for 24 h, 3 d, or 7 d. Wind direction is averaged as a speed-weighted vector and is referenced to magnetic north. Rain and solar are hidden (no sensors).
+
+The weather download covers 2025-02-24 on, up to `web.max_download_days` (31) per request. Before 2026-10-07 12:11:23 it reads the LabVIEW-era files in `weather_station/`, which hold wind speed, wind direction, temperature, RH, and pressure only. About 20 min around the cutover have no data. Rows keep file order and repeated timestamps, so the repeated hour at the fall daylight saving change is not lost.
+
+Pages and static files are sent with `Cache-Control: no-cache`, so browsers load new page scripts after an update.
+
+## Alarms and notification email
+
+All email goes to the SMTP settings in `daq_local.json`. On the DAQ PC it is sent from a background queue, so a slow SMTP server never holds up acquisition.
+
+| Email | Sent by | When | Recipients |
+|---|---|---|---|
+| `ALARM`, `ALARM ONGOING`, `CLEARED` | DAQ PC | A rule's condition holds for its dwell time; repeats every `alarms.email.min_interval_s` (3600 s) while tripped; clears per the rule's `deadband` and `clear_dwell_s` | `alarm_rule_email[description]`, else `to_addrs` |
+| `ALARM WINDOW ENDED` | DAQ PC | A temporary rule is still tripped when its window ends | Same as the rule |
+| `FROZEN` | DAQ PC | A channel repeats one value for `frozen_count` (60) records | `to_addrs` |
+| `DROPOUT` | DAQ PC | No indoor record for `dropout_s` (30 s) | `to_addrs` |
+| `MISSION UNREACHABLE`, `MISSION REACHABLE AGAIN` | DAQ PC | Mission unreachable for `mission_outage_s` (7200 s), then on recovery | `to_addrs` |
+| `CONFIG RELOAD REJECTED` | DAQ PC | An edit to the reloadable config fails validation | `to_addrs` |
+| `No DAQ update on Mission` | Dashboard in mission mode (appleseed) | Heartbeat on Mission older than `web.stale_alarm_s` (24 h); repeats every 24 h; one email on recovery | `to_addrs` of that machine |
+
+The last row covers the case the DAQ PC cannot report: a power loss or a stopped daemon. It runs only in mission mode; set `MH_DAQ_WATCHDOG=1` or `0` to force it on or off.
+
+### Adding or changing an alarm without a restart
+
+The daemon re-reads `alarms.rules` and `channel_status` in `config/daq_config.json`, and `alarm_rule_email` in `daq_local.json`, every 30 s. To add a temporary rule, for example a pressure limit during a test:
+
+1. Add the rule to `alarms.rules` in this repository. Give it a unique `description`, `"category": "temporary"`, and `active_from` and `active_until` in local time (`YYYY-MM-DD HH:MM:SS`). Outside that window the rule never trips.
+2. Commit, push, and pull on the DAQ PC. Edit the repository, not the DAQ PC copy, so the next pull does not conflict.
+3. To send the rule to specific people, add its description to `alarm_rule_email` in the DAQ PC's `daq_local.json`. Without an entry it goes to `to_addrs`.
+4. Within 30 s `mh_daq.log` shows `Alarm rules reloaded:` with each rule and its window. A bad edit leaves the running rules in place and sends `CONFIG RELOAD REJECTED`.
+
+Example:
+
+```json
+{
+  "channel": "dP_Fam-W-Hi_M1_C6",
+  "description": "Family room west dP low (ozone remediation)",
+  "category": "temporary",
+  "active_from": "2026-11-18 00:00:00",
+  "active_until": "2026-11-21 23:59:59",
+  "high": null,
+  "low": 15.0,
+  "dwell_s": 60,
+  "deadband": 1.0,
+  "clear_dwell_s": 300,
+  "unit": "Pa"
+}
+```
+
+The rule trips after the value stays below 15.0 Pa for 60 s. It clears only after the value stays at or above 16.0 Pa (`low + deadband`) for 300 s, so a reading that wanders across 15.0 Pa sends one `ALARM`, not an `ALARM` and `CLEARED` pair each minute. `deadband` is in the rule's unit and defaults to 0. `clear_dwell_s` defaults to `dwell_s`. Both reload live; `min_interval_s` needs a restart.
+
+Changes to any other section (channel map, scales, timing, AIO 2, mirror, quality limits) need a daemon restart; the log says so when it sees one.
+
+### Tagging a channel offline
+
+Add the channel to `channel_status.offline` with a reason, and record connections and swaps in `channel_status.events`. The dashboard greys the card; logging, plotting, and alarms are unchanged, so a sensor reattached before the tag is removed still shows its data. The tag reloads on the DAQ PC and on each dashboard without a restart, and the daemon copies it into that day's metadata file. Also add a row to `docs/operations_log.md`.
+
+## Configuration
+
+`config/daq_config.json` is committed and shared:
+
+| Section | Holds | Reloads live |
+|---|---|---|
+| `acquisition` | 1 kHz sampling, 100 samples per 1 s record | No |
+| `scales`, `cdaq` | NI MAX coefficients chained to SI, and the channel map | No |
+| `aio2` | Serial settings and output columns (`present: false` for rain and solar) | No |
+| `mirror` | Snapshot, in-progress, and retry intervals; Mission subfolder | No |
+| `alarms.email`, `alarms.quality` | Email throttle, dropout, frozen, and Mission-outage limits | No |
+| `alarms.rules` | Threshold rules, standing or temporary | Yes |
+| `channel_status` | Offline tags and sensor events | Yes |
+| `legacy_outdoor` | LabVIEW-era weather folder, file name, cutover time, first date | No |
+| `web` | Stale banner and watchdog ages, download cap | No |
+| `display_ranges` | Living-space T and RH card colors | No |
+
+`daq_local.json` is per machine and gitignored: paths, serial port, SMTP, `alarm_rule_email`, and `retention_days`. `retention_days` is read but not enforced; nothing deletes local files.
+
+The loader validates cross-references at startup (every channel's scale exists, every rule and tag targets a real channel, rule descriptions are unique, windows are in order) and fails with a message that names the bad key.
+
+Output is SI with the unit in each column name: differential pressure in Pa, airflow in m3/h, temperature in degC, relative humidity in percent, and power in W. Timestamps are local time.
+
+## Instruments
+
+Instrument ranges, accuracy, resolution, and channel assignments are in [docs/instruments/INSTRUMENT_DOCUMENTATION.md](docs/instruments/INSTRUMENT_DOCUMENTATION.md). Manufacturer manuals are linked from [docs/instruments/pdf_links.md](docs/instruments/pdf_links.md); the local PDF copies are gitignored.
+
+## Timekeeping
+
+The DAQ PC clock is set by NetTime 3.1.4, installed 2026-11-09 as a service that starts at boot. It syncs hourly from `time.nist.gov` and `time.windows.com` (SNTP, port 123). Each correction steps the clock; the hourly corrections are milliseconds, below the 1 s record spacing. The daemon paces its loop on the monotonic clock, so a correction moves timestamps but does not disturb the 1 s cycle.
+
+## Contact
+
+Nathan Lima, National Institute of Standards and Technology, Engineering Laboratory, Energy and Environment Division, Indoor Air Quality and Ventilation Group. Contact: nathan.lima@nist.gov.
 
 ## Citation
 
-If you use this software in your research, please cite as:
+Citation metadata is in `CITATION.cff`. BibTeX:
 
 ```bibtex
 @software{lima_2026_building423_daq,
   author    = {Lima, Nathan M.},
-  title     = {{Building 423 IAQ Manufactured House DAQ --- Automated Data Acquisition and Backup System}},
+  title     = {{Building 423 IAQ Manufactured House (MH) DAQ: Data Acquisition, Logging, Alarms, and Live Display}},
   year      = {2026},
-  version   = {1.0},
+  version   = {2.0.0},
   publisher = {National Institute of Standards and Technology},
   url       = {https://github.com/usnistgov/Building423_IAQ-MH_DAQ},
   doi       = {10.18434/mds2-4154}
 }
 ```
----
 
-## Contact
+## License
 
-- **PI:** [Dr. Nathan Lima](https://www.nist.gov/people/dr-nathan-lima)
-- **NIST Organizational Unit:** [Engineering Laboratory](https://www.nist.gov/el)
-- **Division:** [Building Energy and Environment Division](https://www.nist.gov/el/beed)
-- **Group:** [Indoor Air Quality and Ventilation Group](https://www.nist.gov/el/beed/indoor-air-quality-ventilation)
-- **Email:** nathan.lima@nist.gov
-
-
-<!-- References -->
-
-[18f-guide]: https://github.com/18F/open-source-guide/blob/18f-pages/pages/making-readmes-readable.md
-[cornell-meta]: https://data.research.cornell.edu/content/readme
-[gh-cdo]: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
-[gh-mdn]: https://github.github.com/gfm/
-[gh-nst]: https://github.com/usnistgov
-[gh-odi]: https://odiwiki.nist.gov/ODI/GitHub.html
-[gh-osr]: https://github.com/usnistgov/opensource-repo/
-[gh-ost]: https://github.com/orgs/usnistgov/teams/opensource-team
-[gh-rob]: https://odiwiki.nist.gov/pub/ODI/GitHub/GHROB.pdf
-[gh-tpl]: https://github.com/usnistgov/carpentries-development/discussions/3
-[li-bsd]: https://opensource.org/licenses/bsd-license
-[li-gpl]: https://opensource.org/licenses/gpl-license
-[li-mit]: https://opensource.org/licenses/mit-license
-[nist-code]: https://code.nist.gov
-[nist-disclaimer]: https://www.nist.gov/open/license
-[nist-s-1801-02]: https://inet.nist.gov/adlp/directives/review-data-intended-publication
-[nist-open]: https://www.nist.gov/open/license#software
-[wk-rdm]: https://en.wikipedia.org/wiki/README
+See `LICENSE.md`. NIST-developed software is provided as a public service and expressly provided "AS IS." This software is not intended for use in any situation where failure could cause risk of injury or damage to property.
