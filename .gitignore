@@ -235,3 +235,9 @@ $RECYCLE.BIN/
 docs/instruments/*.pdf
 docs/instruments/*.xlsx
 docs/*.xlsx
+
+# MH DAQ v2: machine-specific config and data, never committed
+daq_local.json
+config/daq_local.json
+data/
+results/
