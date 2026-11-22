@@ -1,9 +1,9 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it using the metadata below."
 type: software
-title: "Building 423 IAQ Manufactured House DAQ — Automated Data Acquisition and Backup System"
-version: "1.0"
-date-released: "2026-05-01"
+title: "Building 423 IAQ Manufactured House (MH) DAQ: Data Acquisition, Logging, Alarms, and Live Display"
+version: "2.0.0"
+date-released: "2026-11-22"
 authors:
   - family-names: Lima
     given-names: Nathan M.
@@ -14,15 +14,18 @@ license: NIST-PD
 repository-code: "https://github.com/usnistgov/Building423_IAQ-MH_DAQ"
 doi: "10.18434/mds2-4154"
 abstract: >
-  Automated backup and data collection scripts for the NIST IAQ Manufactured
-  House (MH) test facility Data Acquisition (DAQ) system at Building 423.
-  Provides incremental file backup from the DAQ desktop computer to network
-  storage and automated download of thermostat runtime data via the Ecobee API.
+  Python data acquisition system for the NIST Building 423 Indoor Air Quality
+  (IAQ) Manufactured House. It reads an NI cDAQ-9178 chassis (five NI 9201
+  voltage modules and one NI 9213 thermocouple module) and a Met One AIO 2
+  weather sensor, averages 1 kHz samples into 1 s records, scales voltages to
+  SI units, writes daily raw and SI files, mirrors them to network storage,
+  sends alarm email, and serves a live dashboard and weather page. Version
+  2.0.0 replaces the LabVIEW acquisition VIs and the v1 file backup scripts.
 keywords:
   - indoor air quality
   - data acquisition
   - building science
   - NIST
   - manufactured housing
-  - thermostat
-  - ecobee
+  - weather station
+  - NI cDAQ

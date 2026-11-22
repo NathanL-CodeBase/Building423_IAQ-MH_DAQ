@@ -2,7 +2,7 @@
 
 Author: Nathan Lima (NIST)
 Created: 2026-09-25
-Last updated: 2026-11-10
+Last updated: 2026-11-22
 
 The build history, resolved open items, and earlier status notes were removed on 2026-10-02 and 2026-11-10. They remain in git history before those dates. Dated events (restarts, outages, clock and sensor changes) are in `operations_log.md`.
 
@@ -12,7 +12,7 @@ One Python system replaces three pieces: the LabVIEW cDAQ acquisition VI, the br
 
 ## Status (2026-11-10)
 
-The daemon is the system of record. It replaced LabVIEW at 2026-10-07 12:11:23 and has run on the DAQ PC since, apart from the gaps in `operations_log.md`. It is still run as an extended test setup, started by hand, until the fold into `Building423_IAQ-MH_DAQ`. The old Mission backup script is retired. The dashboard runs on the DAQ PC in local mode and on appleseed in mission mode.
+The daemon is the system of record. It replaced LabVIEW at 2026-10-07 12:11:23 and has run on the DAQ PC since, apart from the gaps in `operations_log.md`. It is still run as an extended test setup, started by hand, until the DAQ PC runs from a clone of `Building423_IAQ-MH_DAQ` (item 7). The old Mission backup script is retired. The dashboard runs on the DAQ PC in local mode and on appleseed in mission mode.
 
 Added 2026-11-09 to 11-10:
 
@@ -43,15 +43,15 @@ Ordered roughly by when each should happen.
 
 4. **Recovery after a power loss.** The house lost power at 2026-10-17 06:54:18, and the daemon did not run again until 2026-10-26 12:50:55. That is 9 d 6 h with no data.
    - **BIOS:** set the power-restore setting (named "AC power recovery", "Restore on AC power loss", or similar) to power on, so the PC boots when power returns.
-   - **Autostart:** the daemon is still started by hand as a test setup. Splinterware autostart through `start_mh_daq.bat` waits until this code is folded into `Building423_IAQ-MH_DAQ` (item 7). Until then, a reboot leaves the daemon stopped.
-   - **`.bat` paths:** the file holds fixed `C:\Users\iaq` paths. Change it to find the repository from its own folder, as `start_dashboard_mission.bat` does, before it is used.
+   - **Autostart:** the daemon is still started by hand as a test setup. Splinterware autostart through `start_mh_daq.bat` waits until the DAQ PC runs from the `Building423_IAQ-MH_DAQ` clone (item 7). Until then, a reboot leaves the daemon stopped.
+   - **`.bat` paths:** fixed 2026-11-22. `start_mh_daq.bat` now finds the repository from its own folder and conda the same way `start_dashboard_mission.bat` does.
    - **Backstop:** the appleseed watchdog (added 2026-11-09) emails after 24 h without a heartbeat. It covers a stopped daemon as well as a dead PC.
 
 5. **Local retention window.** `retention_days` is 90 in `daq_local.template.json`. The config loader reads it, but nothing deletes old local files. Enforcing it deletes local data, so decide the window and the rule (for example, delete only files already confirmed on Mission) before coding it.
 
 6. **Access separation.** The group-private page shows all channels; the NIST-internal weather page shows AIO 2 only. Two routes on one app with different scopes is the simplest layout. Choose the auth mechanism once the web box is on a reachable network. The box runs Windows 11 now and may move to a Linux VM through IT; uvicorn runs the same on both.
 
-7. **Fold into `usnistgov/Building423_IAQ-MH_DAQ`** as a major update, pushed as NathanL-NIST over SSH. Set up Splinterware autostart after the fold.
+7. **Fold into `Building423_IAQ-MH_DAQ`.** Merged with full history as v2.0.0 on 2026-11-22 in `NathanL-CodeBase/Building423_IAQ-MH_DAQ`. Remaining, in order: push to `usnistgov/Building423_IAQ-MH_DAQ` as NathanL-NIST over SSH; move the DAQ PC daemon to a clone of this repository (copy `daq_local.json` by hand, log the stop and start in `operations_log.md`); set up Splinterware autostart; then archive `NIST_mh-daq-rebuild` on GitHub.
 
 8. **Smaller items:**
    - **Disconnected sensors.** Reattach or retire the sensors tagged offline in `channel_status`, and record the date in config and `operations_log.md`. These are seven slot 1 Setra 264 envelope channels and the Attic, Ba1, UR, and HVAC supply HMP T and RH probes.

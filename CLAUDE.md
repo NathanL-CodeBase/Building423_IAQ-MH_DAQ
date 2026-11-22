@@ -7,8 +7,8 @@ This file adds to the global preferences in `~/.claude/CLAUDE.md` and does not r
 - Hardware: NI cDAQ-9178 (five NI 9201 voltage modules, one NI 9213 thermocouple module) and a Met One AIO 2 on RS-485 to USB (9600 baud, 8N1, 1 Hz).
 - Conda environments: `iaqmh_daq` for acquisition, `mh_daq_web` for the dashboard.
 - Status (2026-11-10): the system of record since 2026-10-07 12:11:23 local, still run as an extended test setup started by hand (no Splinterware autostart). The dashboard runs on the DAQ PC (local mode) and on appleseed (mission mode, with the stale-heartbeat email watchdog).
-- Record every restart, outage, clock change, and sensor change in `doc/operations_log.md`. Remaining work is in `doc/mh-daq-plan.md`.
-- This repository will be folded into `Building423_IAQ-MH_DAQ`, which works on the same hardware. Splinterware autostart waits for the fold.
+- Record every restart, outage, clock change, and sensor change in `docs/operations_log.md`. Remaining work is in `docs/mh-daq-plan.md`.
+- The MH DAQ rebuild was folded into this repository (`Building423_IAQ-MH_DAQ`) as v2.0.0 on 2026-11-22; the v1 backup scripts remain at tag `v1.0.0`. Splinterware autostart waits until the DAQ PC runs from a clone of this repository.
 
 ## When to load a skill
 - `iaq-field-data`: before changing acquisition, scaling, writer, mirror, or config code, and before reading an output file.
@@ -55,8 +55,6 @@ What that evaluation found, and what it means here:
 - Slot 1 (NI 9201) is installed and logged, but the Setra 264 envelope dP sensors are not connected to it (confirmed 2026-10-10). Its channels report an open-input voltage, not a pressure. The sensors are still in the house with their wires run to the DAQ, so they can be reattached. Treat the slot 1 columns as no data, keep the channels in the channel map, and when I say a sensor is reconnected, record the date and time in config and in the metadata file. Exception: `dP_Fam-W-Hi_M1_C6` has had a Setra 264 (+/-0.1 in WC) attached since about 2026-11-04 18:02:44, recorded in `channel_status.events`.
 
 ## Differences from the repository standard
-- Documentation is in `doc/`, not `docs/`.
 - The local config is `daq_local.json`, created from `config/daq_local.template.json`. There is no `data_config.json`.
 - Entry points (`run_daq.py`, `status.py`, `compare_cutover.py`) sit in the repository root, not in `scripts/`.
-- The citation file is `CITATION.md`, not `CITATION.cff`.
-- Leave these as they are. The layout will be settled when the code moves into `Building423_IAQ-MH_DAQ`.
+- These were kept at the v2.0.0 fold (2026-11-22). Leave them as they are.

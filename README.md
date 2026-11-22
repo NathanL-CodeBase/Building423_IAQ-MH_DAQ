@@ -1,4 +1,4 @@
-# MH DAQ
+# Building 423 IAQ Manufactured House (MH) DAQ
 
 Data acquisition, logging, alarms, and live web display for the NIST Building 423 IAQ Manufactured House. This system reads a National Instruments cDAQ-9178 chassis (indoor temperature, relative humidity, differential pressure, HVAC airflow and power, blower-motor thermocouples) and a Met One AIO 2 sonic weather sensor, scales readings to SI units, writes daily data files, mirrors them to network storage (Mission), sends alarm email, and serves a live dashboard and a weather page with data download.
 
@@ -6,9 +6,19 @@ It replaces three earlier pieces: a LabVIEW cDAQ acquisition VI, a LabVIEW AIO 2
 
 ## Status
 
-The daemon has been the system of record since 2026-10-07 12:11:23 local time, when it replaced the LabVIEW VIs. It runs on the DAQ PC in the house as an extended test setup, started by hand. The dashboard runs on the DAQ PC (local mode) and on appleseed, an always-on desktop that reads the Mission copies. Restarts, outages, clock changes, and sensor changes are listed in `doc/operations_log.md`. Remaining work is in `doc/mh-daq-plan.md`.
+The daemon has been the system of record since 2026-10-07 12:11:23 local time, when it replaced the LabVIEW VIs. It runs on the DAQ PC in the house as an extended test setup, started by hand. The dashboard runs on the DAQ PC (local mode) and on appleseed, an always-on desktop that reads the Mission copies. Restarts, outages, clock changes, and sensor changes are listed in `docs/operations_log.md`. Remaining work is in `docs/mh-daq-plan.md`.
 
-This repository will be folded into `usnistgov/Building423_IAQ-MH_DAQ`.
+Version 2.0.0 (2026-11-22) folded the MH DAQ rebuild into this repository and retired the v1 backup scripts. The v1 code remains at tag `v1.0.0`. Changes by version are in `CHANGELOG.md`.
+
+## Disclaimer
+
+Certain commercial equipment, instruments, software, or materials are identified in this repository in order to specify the experimental and analytical procedures adequately. Such identification is not intended to imply recommendation or endorsement of any product or service by NIST, nor is it intended to imply that the materials or equipment identified are necessarily the best available for the purpose.
+
+## Measurement uncertainty
+
+The NI-DAQmx backend samples each indoor channel at 1 kHz and averages 100 samples into each 1 s record. The daemon converts the averaged voltage to SI with the linear coefficients from the NI MAX export (`scales` in `config/daq_config.json`), then applies fixed unit factors: 248.84 Pa per inch WC and 1.699 m3/h per ACFM. The raw volts (thermocouples in degC) go to `{YYYYMMDD}-MH_Indoor_raw.txt` beside the SI file, so every converted value can be recomputed. AIO 2 values are logged as the sensor reports them, with no scaling.
+
+This repository does not compute measurement uncertainty. It comes from the instruments, the NI 9201 and NI 9213 modules, and the scale coefficients. Instrument ranges, accuracy, resolution, and calibration information are in [docs/instruments/INSTRUMENT_DOCUMENTATION.md](docs/instruments/INSTRUMENT_DOCUMENTATION.md).
 
 ## Repository contents
 
@@ -19,10 +29,11 @@ This repository will be folded into `usnistgov/Building423_IAQ-MH_DAQ`.
 - `run_daq.py` entry point for the acquisition daemon (`--sim` or `--hardware`).
 - `status.py` a read-only status view for confirming a running daemon over Remote Desktop.
 - `compare_cutover.py` a helper for comparing daemon output against reference values, used at the hardware cutover.
-- `start_mh_daq.bat` daemon launcher for Splinterware System Scheduler autostart. Not in use yet: the daemon is started by hand until the fold into `Building423_IAQ-MH_DAQ`.
+- `start_mh_daq.bat` daemon launcher for Splinterware System Scheduler autostart. It finds conda and the repository the same way `start_dashboard_mission.bat` does, so it holds no machine paths. Not in use yet: autostart is set up after the DAQ PC runs from this repository.
 - `start_dashboard_mission.bat` dashboard launcher for a read-only machine; reads Mission and opens the default browser.
 - `environment.yaml` the acquisition conda environment (`iaqmh_daq`); `environment-web.yaml` the web environment (`mh_daq_web`).
-- `doc/` the plan and remaining work (`mh-daq-plan.md`) and the operations log (`operations_log.md`).
+- `docs/` the plan and remaining work (`mh-daq-plan.md`), the operations log (`operations_log.md`), and the instrument documentation (`instruments/`).
+- `CHANGELOG.md` changes by version; `CITATION.cff` citation metadata.
 
 ## Data flow
 
@@ -91,7 +102,7 @@ Run the daemon on real hardware (DAQ PC only, and only when no other program own
 python run_daq.py --hardware
 ```
 
-Record every restart, with the stop and start times from `mh_daq.log`, in `doc/operations_log.md`.
+Record every restart, with the stop and start times from `mh_daq.log`, in `docs/operations_log.md`.
 
 Check a running daemon, for example over Remote Desktop:
 
@@ -189,7 +200,7 @@ Changes to any other section (channel map, scales, timing, AIO 2, mirror, qualit
 
 ### Tagging a channel offline
 
-Add the channel to `channel_status.offline` with a reason, and record connections and swaps in `channel_status.events`. The dashboard greys the card; logging, plotting, and alarms are unchanged, so a sensor reattached before the tag is removed still shows its data. The tag reloads on the DAQ PC and on each dashboard without a restart, and the daemon copies it into that day's metadata file. Also add a row to `doc/operations_log.md`.
+Add the channel to `channel_status.offline` with a reason, and record connections and swaps in `channel_status.events`. The dashboard greys the card; logging, plotting, and alarms are unchanged, so a sensor reattached before the tag is removed still shows its data. The tag reloads on the DAQ PC and on each dashboard without a restart, and the daemon copies it into that day's metadata file. Also add a row to `docs/operations_log.md`.
 
 ## Configuration
 
@@ -214,6 +225,10 @@ The loader validates cross-references at startup (every channel's scale exists, 
 
 Output is SI with the unit in each column name: differential pressure in Pa, airflow in m3/h, temperature in degC, relative humidity in percent, and power in W. Timestamps are local time.
 
+## Instruments
+
+Instrument ranges, accuracy, resolution, and channel assignments are in [docs/instruments/INSTRUMENT_DOCUMENTATION.md](docs/instruments/INSTRUMENT_DOCUMENTATION.md). Manufacturer manuals are linked from [docs/instruments/pdf_links.md](docs/instruments/pdf_links.md); the local PDF copies are gitignored.
+
 ## Timekeeping
 
 The DAQ PC clock is set by NetTime 3.1.4, installed 2026-11-09 as a service that starts at boot. It syncs hourly from `time.nist.gov` and `time.windows.com` (SNTP, port 123). Each correction steps the clock; the hourly corrections are milliseconds, below the 1 s record spacing. The daemon paces its loop on the monotonic clock, so a correction moves timestamps but does not disturb the 1 s cycle.
@@ -224,7 +239,19 @@ Nathan Lima, National Institute of Standards and Technology, Engineering Laborat
 
 ## Citation
 
-See `CITATION.md` for citation text.
+Citation metadata is in `CITATION.cff`. BibTeX:
+
+```bibtex
+@software{lima_2026_building423_daq,
+  author    = {Lima, Nathan M.},
+  title     = {{Building 423 IAQ Manufactured House (MH) DAQ: Data Acquisition, Logging, Alarms, and Live Display}},
+  year      = {2026},
+  version   = {2.0.0},
+  publisher = {National Institute of Standards and Technology},
+  url       = {https://github.com/usnistgov/Building423_IAQ-MH_DAQ},
+  doi       = {10.18434/mds2-4154}
+}
+```
 
 ## License
 
